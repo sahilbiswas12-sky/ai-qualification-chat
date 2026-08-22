@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 
 import { useChat } from "@ai-sdk/react";
@@ -15,14 +16,58 @@ import {
 } from "ai";
 
 const STORAGE_KEY = "ai-qualification-chat-messages";
+const MAX_CHARACTERS = 1500;
+
+const qualificationSteps = [
+  "Project problem",
+  "Target users",
+  "Core features",
+  "Technology",
+  "Timeline",
+  "Budget and resources",
+];
+
+const starterPrompts = [
+  {
+    title: "Student expense tracker",
+    text: "I want to build an AI-powered expense tracker for college students.",
+  },
+  {
+    title: "Smart task manager",
+    text: "I want to create an intelligent task-management application.",
+  },
+  {
+    title: "Qualify my business idea",
+    text: "I have a business idea, but I need help defining its requirements.",
+  },
+];
+
+const quickReplies = [
+  "Give me some examples",
+  "Recommend the best option",
+  "Keep the first version simple",
+];
+
+function getMessageText(message: UIMessage) {
+  return message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+}
 
 export default function Chat() {
   const [input, setInput] = useState("");
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [isStorageLoaded, setIsStorageLoaded] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [notice, setNotice] = useState("");
+  const [showClearConfirmation, setShowClearConfirmation] =
+    useState(false);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const noticeTimerRef = useRef<number | null>(null);
 
   const {
     messages,
@@ -40,6 +85,30 @@ export default function Chat() {
   const isGenerating =
     status === "submitted" || status === "streaming";
 
+  const userMessageCount = messages.filter(
+    (message) => message.role === "user",
+  ).length;
+
+  const assistantMessageCount = messages.filter(
+    (message) => message.role === "assistant",
+  ).length;
+
+  const completedSteps = Math.min(
+    userMessageCount,
+    qualificationSteps.length,
+  );
+
+  const progressPercentage =
+    (completedSteps / qualificationSteps.length) * 100;
+
+  const currentStep =
+    qualificationSteps[
+      Math.min(completedSteps, qualificationSteps.length - 1)
+    ];
+
+  const canGenerateBrief =
+    completedSteps === qualificationSteps.length && !isGenerating;
+
   const lastMessage = messages.at(-1);
 
   const hasAssistantText =
@@ -50,7 +119,28 @@ export default function Chat() {
 
   const showThinking = isGenerating && !hasAssistantText;
 
-  // Restore the saved conversation after the component loads.
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+
+    function handleOnline() {
+      setIsOnline(true);
+      showNotice("Internet connection restored");
+    }
+
+    function handleOffline() {
+      setIsOnline(false);
+      showNotice("You are currently offline");
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
   useEffect(() => {
     try {
       const savedMessages = localStorage.getItem(STORAGE_KEY);
@@ -72,7 +162,6 @@ export default function Chat() {
     }
   }, [setMessages]);
 
-  // Save every conversation update, including partial stopped messages.
   useEffect(() => {
     if (!isStorageLoaded) {
       return;
@@ -91,7 +180,6 @@ export default function Chat() {
     }
   }, [messages, isStorageLoaded]);
 
-  // Follow streamed text only while the user remains near the bottom.
   useEffect(() => {
     if (isPinnedToBottom) {
       messagesEndRef.current?.scrollIntoView({
@@ -100,6 +188,37 @@ export default function Chat() {
       });
     }
   }, [messages, status, isPinnedToBottom]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [input]);
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) {
+        window.clearTimeout(noticeTimerRef.current);
+      }
+    };
+  }, []);
+
+  function showNotice(message: string) {
+    setNotice(message);
+
+    if (noticeTimerRef.current) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
+
+    noticeTimerRef.current = window.setTimeout(() => {
+      setNotice("");
+    }, 2500);
+  }
 
   function handleMessagesScroll() {
     const container = messagesContainerRef.current;
@@ -125,49 +244,278 @@ export default function Chat() {
     });
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitMessage(message: string) {
+    const cleanMessage = message.trim();
 
-    const message = input.trim();
+    if (!cleanMessage || isGenerating) {
+      return;
+    }
 
-    if (!message || isGenerating) {
+    if (isOnline === false) {
+      showNotice("Reconnect to the internet before sending");
       return;
     }
 
     setInput("");
     setIsPinnedToBottom(true);
 
-    await sendMessage({
-      text: message,
-    });
+    try {
+      await sendMessage({
+        text: cleanMessage,
+      });
+    } catch (sendError) {
+      console.error("Could not send message:", sendError);
+      showNotice("Message could not be sent");
+    }
   }
 
-  function clearConversation() {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitMessage(input);
+  }
+
+  function handleKeyDown(
+    event: KeyboardEvent<HTMLTextAreaElement>,
+  ) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
+  function requestClearConversation() {
     if (isGenerating) {
       stop();
     }
 
+    setShowClearConfirmation(true);
+  }
+
+  function cancelClearConversation() {
+    setShowClearConfirmation(false);
+  }
+
+  function confirmClearConversation() {
     setMessages([]);
     setInput("");
     setIsPinnedToBottom(true);
+    setShowClearConfirmation(false);
     localStorage.removeItem(STORAGE_KEY);
+    showNotice("Conversation cleared");
+  }
+
+  async function copyConversation() {
+    const conversation = messages
+      .map((message) => {
+        const speaker =
+          message.role === "user" ? "You" : "AI Assistant";
+
+        return `${speaker}\n${getMessageText(message)}`;
+      })
+      .join("\n\n");
+
+    try {
+      await navigator.clipboard.writeText(conversation);
+      showNotice("Conversation copied");
+    } catch {
+      showNotice("Unable to copy conversation");
+    }
+  }
+
+  function downloadConversation() {
+    const conversation = messages
+      .map((message) => {
+        const speaker =
+          message.role === "user" ? "You" : "AI Assistant";
+
+        return `## ${speaker}\n\n${getMessageText(message)}`;
+      })
+      .join("\n\n");
+
+    const documentContent = [
+      "# AI Project Qualification",
+      "",
+      `Generated: ${new Date().toLocaleString()}`,
+      "",
+      conversation,
+    ].join("\n");
+
+    const file = new Blob([documentContent], {
+      type: "text/markdown",
+    });
+
+    const downloadUrl = URL.createObjectURL(file);
+    const downloadLink = document.createElement("a");
+
+    downloadLink.href = downloadUrl;
+    downloadLink.download = "ai-project-qualification.md";
+    downloadLink.click();
+
+    URL.revokeObjectURL(downloadUrl);
+    showNotice("Project qualification downloaded");
+  }
+
+  async function generateFinalBrief() {
+    await submitMessage(
+      "Using everything I have shared, create my final project brief. Include the project goal, target users, problem, core features, recommended technology, timeline, limitations, MVP scope, and next development steps.",
+    );
   }
 
   return (
-    <section aria-label="AI qualification chat">
+    <section
+      className="chat-shell"
+      aria-label="AI qualification chat"
+    >
+      <div className="chat-glow chat-glow-one" />
+      <div className="chat-glow chat-glow-two" />
+
+      <div className="chat-topbar">
+        <div className="assistant-identity">
+          <div className="assistant-logo" aria-hidden="true">
+            AI
+          </div>
+
+          <div>
+            <div className="assistant-name-row">
+              <h2>Project Intelligence</h2>
+
+              <span
+                className={`connection-status ${
+                  isOnline === null
+                    ? "checking"
+                    : isOnline
+                      ? "online"
+                      : "offline"
+                }`}
+              >
+                <span aria-hidden="true" />
+
+                {isOnline === null
+                  ? "Checking"
+                  : isOnline
+                    ? "Online"
+                    : "Offline"}
+              </span>
+            </div>
+
+            <p>
+              Streaming project qualification assistant
+            </p>
+          </div>
+        </div>
+
+        {messages.length > 0 && (
+          <div className="chat-actions">
+            <button
+              type="button"
+              onClick={copyConversation}
+              disabled={isGenerating}
+            >
+              Copy
+            </button>
+
+            <button
+              type="button"
+              onClick={downloadConversation}
+              disabled={isGenerating}
+            >
+              Export
+            </button>
+
+            <button
+              type="button"
+              className="danger-action"
+              onClick={requestClearConversation}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="qualification-dashboard">
+        <div className="progress-information">
+          <div className="progress-heading">
+            <span>Qualification progress</span>
+
+            <span>
+              {completedSteps}/{qualificationSteps.length}
+            </span>
+          </div>
+
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label="Qualification progress"
+            aria-valuemin={0}
+            aria-valuemax={qualificationSteps.length}
+            aria-valuenow={completedSteps}
+          >
+            <span
+              style={{
+                width: `${progressPercentage}%`,
+              }}
+            />
+          </div>
+
+          <small>
+            {completedSteps === qualificationSteps.length
+              ? "Qualification complete"
+              : `Current area: ${currentStep}`}
+          </small>
+        </div>
+
+        <div className="conversation-stats">
+          <div>
+            <strong>{userMessageCount}</strong>
+            <span>Your answers</span>
+          </div>
+
+          <div>
+            <strong>{assistantMessageCount}</strong>
+            <span>AI responses</span>
+          </div>
+        </div>
+      </div>
+
       <div
         ref={messagesContainerRef}
+        className="messages-panel"
         onScroll={handleMessagesScroll}
         aria-live="polite"
       >
         {messages.length === 0 && (
-          <div>
-            <h2>Start your project qualification</h2>
+          <div className="chat-empty-state">
+            <span className="eyebrow">Start a new analysis</span>
+
+            <h2>What do you want to build?</h2>
 
             <p>
-              Describe the project you want to build. The assistant
-              will ask one question at a time.
+              Describe your idea or select a starting point. The AI
+              will ask focused questions and turn your answers into a
+              development-ready project brief.
             </p>
+
+            <div className="starter-prompts">
+              {starterPrompts.map((prompt) => (
+                <button
+                  key={prompt.title}
+                  type="button"
+                  onClick={() => submitMessage(prompt.text)}
+                  disabled={isGenerating || isOnline === false}
+                >
+                  <strong>{prompt.title}</strong>
+                  <span>{prompt.text}</span>
+                  <span className="prompt-arrow" aria-hidden="true">
+                    →
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -176,35 +524,92 @@ export default function Chat() {
             key={message.id}
             data-role={message.role}
           >
-            <strong>
-              {message.role === "user" ? "You" : "AI Assistant"}
-            </strong>
+            <div className="message-avatar" aria-hidden="true">
+              {message.role === "user" ? "SB" : "AI"}
+            </div>
 
-            {message.parts.map((part, index) => {
-              if (part.type !== "text") {
-                return null;
-              }
+            <div className="message-content">
+              <strong>
+                {message.role === "user"
+                  ? "You"
+                  : "Project Intelligence"}
+              </strong>
 
-              return (
-                <p key={`${message.id}-${index}`}>
-                  {part.text}
-                </p>
-              );
-            })}
+              {message.parts.map((part, index) => {
+                if (part.type !== "text") {
+                  return null;
+                }
+
+                return (
+                  <p key={`${message.id}-${index}`}>
+                    {part.text}
+                  </p>
+                );
+              })}
+            </div>
           </article>
         ))}
 
         {showThinking && (
-          <div role="status">
-            <span>AI is thinking…</span>
+          <div role="status" className="thinking-indicator">
+            <div className="message-avatar" aria-hidden="true">
+              AI
+            </div>
+
+            <div className="thinking-content">
+              <span />
+              <span />
+              <span />
+
+              <span className="thinking-text">
+                Analyzing your project
+              </span>
+            </div>
           </div>
         )}
 
         {error && (
-          <p role="alert">
-            {error.message ||
-              "Something went wrong. Please try again."}
-          </p>
+          <div className="error-message" role="alert">
+            <strong>Generation failed</strong>
+
+            <p>
+              {error.message ||
+                "Something went wrong. Please try again."}
+            </p>
+          </div>
+        )}
+
+        {!isGenerating &&
+          messages.length > 0 &&
+          lastMessage?.role === "assistant" && (
+            <div className="quick-replies">
+              {quickReplies.map((reply) => (
+                <button
+                  key={reply}
+                  type="button"
+                  onClick={() => submitMessage(reply)}
+                  disabled={isOnline === false}
+                >
+                  {reply}
+                </button>
+              ))}
+            </div>
+          )}
+
+        {canGenerateBrief && (
+          <div className="final-brief-card">
+            <div>
+              <span>Qualification complete</span>
+              <strong>Your project brief is ready</strong>
+            </div>
+
+            <button
+              type="button"
+              onClick={generateFinalBrief}
+            >
+              Generate final brief
+            </button>
+          </div>
         )}
 
         <div ref={messagesEndRef} aria-hidden="true" />
@@ -220,40 +625,102 @@ export default function Chat() {
         </button>
       )}
 
-      {messages.length > 0 && !isGenerating && (
-        <button
-          type="button"
-          className="clear-conversation"
-          onClick={clearConversation}
-        >
-          Clear conversation
-        </button>
+      {notice && (
+        <div className="chat-notice" role="status">
+          {notice}
+        </div>
       )}
 
       <form onSubmit={handleSubmit}>
-        <label htmlFor="chat-message">
-          Your message
-        </label>
+        <div className="input-wrapper">
+          <textarea
+            ref={textareaRef}
+            id="chat-message"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              isOnline === false
+                ? "Reconnect to continue..."
+                : "Describe your project idea..."
+            }
+            rows={1}
+            maxLength={MAX_CHARACTERS}
+            disabled={isGenerating || isOnline === false}
+            aria-label="Your message"
+          />
 
-        <textarea
-          id="chat-message"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="Describe your project idea..."
-          rows={3}
-          disabled={isGenerating}
-        />
+          <span className="character-count">
+            {input.length}/{MAX_CHARACTERS}
+          </span>
+        </div>
 
         {isGenerating ? (
-          <button type="button" onClick={stop}>
-            Stop generating
+          <button
+            type="button"
+            className="send-button stop-button"
+            onClick={stop}
+          >
+            <span aria-hidden="true">■</span>
+            Stop
           </button>
         ) : (
-          <button type="submit" disabled={!input.trim()}>
-            Send message
+          <button
+            type="submit"
+            className="send-button"
+            disabled={!input.trim() || isOnline === false}
+          >
+            Send
+            <span aria-hidden="true">↑</span>
           </button>
         )}
+
+        <small className="keyboard-hint">
+          Enter to send · Shift + Enter for a new line
+        </small>
       </form>
+
+      {showClearConfirmation && (
+        <div
+          className="confirmation-overlay"
+          role="presentation"
+          onMouseDown={cancelClearConversation}
+        >
+          <div
+            className="confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="clear-title"
+            aria-describedby="clear-description"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span className="dialog-icon" aria-hidden="true">
+              !
+            </span>
+
+            <h2 id="clear-title">Clear conversation?</h2>
+
+            <p id="clear-description">
+              Your saved messages will be permanently removed from
+              this browser.
+            </p>
+
+            <div>
+              <button type="button" onClick={cancelClearConversation}>
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="confirm-danger"
+                onClick={confirmClearConversation}
+              >
+                Clear conversation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
