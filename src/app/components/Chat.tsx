@@ -60,6 +60,40 @@ function getMessageText(message: UIMessage) {
     .join("");
 }
 
+interface StreamErrorPart {
+  type: "error";
+  errorText?: string;
+}
+
+function getStreamErrorText(messages: UIMessage[]) {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
+    const message = messages[messageIndex];
+
+    for (
+      let partIndex = message.parts.length - 1;
+      partIndex >= 0;
+      partIndex -= 1
+    ) {
+      const part = message.parts[
+        partIndex
+      ] as unknown as StreamErrorPart;
+
+      if (part.type === "error") {
+        return (
+          part.errorText ||
+          "The AI response was interrupted. Please retry the failed response."
+        );
+      }
+    }
+  }
+
+  return "";
+}
+
 function subscribeToOnlineStatus(callback: () => void) {
   window.addEventListener("online", callback);
   window.addEventListener("offline", callback);
@@ -139,6 +173,9 @@ export default function Chat() {
     completedSteps === qualificationSteps.length && !isGenerating;
 
   const lastMessage = messages.at(-1);
+  const streamErrorText = getStreamErrorText(messages);
+  const activeErrorMessage =
+    error?.message || streamErrorText;
 
   const hasAssistantText =
     lastMessage?.role === "assistant" &&
@@ -612,14 +649,13 @@ export default function Chat() {
           </div>
         )}
 
-        {error && (
+        {activeErrorMessage && (
           <div className="error-message" role="alert">
             <div>
               <strong>Response interrupted</strong>
 
               <p>
-                {error.message ||
-                  "The AI response could not be completed. Your conversation is still available."}
+                {activeErrorMessage}
               </p>
             </div>
 
