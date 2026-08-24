@@ -36,7 +36,7 @@ function getLastUserMessage(messages: UIMessage[]) {
 }
 
 function delay(milliseconds: number) {
-  return new Promise((resolve) => {
+  return new Promise<void>((resolve) => {
     setTimeout(resolve, milliseconds);
   });
 }
@@ -49,92 +49,55 @@ function hasMidstreamTestCookie(request: Request) {
   );
 }
 
-function createInterruptedResponse(response: Response) {
-  if (!response.body) {
-    return new Response(
-      "The AI response was interrupted.",
-      { status: 500 },
-    );
-  }
-
-  const reader = response.body.getReader();
+function createInterruptedResponse() {
   const encoder = new TextEncoder();
 
-  let receivedChunks = 0;
-  let interrupted = false;
+  const events = [
+    {
+      type: "start",
+      messageId: `test-${Date.now()}`,
+    },
+    {
+      type: "text-start",
+      id: "test-text",
+    },
+    {
+      type: "text-delta",
+      id: "test-text",
+      delta: "Analyzing your project requirements...",
+    },
+    {
+      type: "error",
+      errorText:
+        "The connection was interrupted while the AI was responding. Please retry the failed response.",
+    },
+  ];
 
-  const interruptedStream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      if (interrupted) {
-        return;
-      }
-
-      try {
-        const { done, value } = await reader.read();
-
-        if (done) {
-          controller.close();
-          return;
-        }
-
-        controller.enqueue(value);
-        receivedChunks += 1;
-
-        if (receivedChunks >= 3) {
-          interrupted = true;
-          await reader.cancel();
-
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "error",
-                errorText:
-                  "The connection was interrupted while the AI was responding. Please retry the failed response.",
-              })}\n\n`,
-            ),
-          );
-
-          controller.close();
-        }
-      } catch {
-        interrupted = true;
-
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      for (const event of events) {
         controller.enqueue(
           encoder.encode(
-            `data: ${JSON.stringify({
-              type: "error",
-              errorText:
-                "The connection was interrupted while the AI was responding. Please retry the failed response.",
-            })}\n\n`,
+            `data: ${JSON.stringify(event)}\n\n`,
           ),
         );
 
-        controller.close();
+        await delay(350);
       }
-    },
 
-    async cancel(reason) {
-      interrupted = true;
-      await reader.cancel(reason);
+      controller.close();
     },
   });
 
-  const headers = new Headers(response.headers);
-
-  /*
-   * This cookie makes the controlled failure happen only once.
-   * Clicking Retry sends the request again, but the second request
-   * is allowed to complete normally.
-   */
-  headers.set(
-    "Set-Cookie",
-    `${MIDSTREAM_TEST_COOKIE}=1; Path=/; Max-Age=300; SameSite=Lax`,
-  );
-
-  return new Response(interruptedStream, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "x-vercel-ai-ui-message-stream": "v1",
+      "Set-Cookie": `${MIDSTREAM_TEST_COOKIE}=1; Path=/; Max-Age=300; SameSite=Lax`,
+    },
   });
 }
 
@@ -161,6 +124,14 @@ export async function POST(request: Request) {
     }
 
     const lastUserMessage = getLastUserMessage(messages);
+
+    const shouldTestMidstreamFailure =
+      lastUserMessage === TEST_MID_STREAM &&
+      !hasMidstreamTestCookie(request);
+
+    if (shouldTestMidstreamFailure) {
+      return createInterruptedResponse();
+    }
 
     if (lastUserMessage === TEST_RATE_LIMIT) {
       return new Response(
@@ -216,7 +187,7 @@ After the tool returns its result, briefly explain the most important recommenda
       },
     });
 
-    const response = result.toUIMessageStreamResponse({
+    return result.toUIMessageStreamResponse({
       originalMessages: messages,
 
       onError(error) {
@@ -234,16 +205,6 @@ After the tool returns its result, briefly explain the most important recommenda
         return "The AI response was interrupted. Please retry the failed response.";
       },
     });
-
-    const shouldTestMidstreamFailure =
-      lastUserMessage === TEST_MID_STREAM &&
-      !hasMidstreamTestCookie(request);
-
-    if (shouldTestMidstreamFailure) {
-      return createInterruptedResponse(response);
-    }
-
-    return response;
   } catch (error) {
     console.error("Chat route error:", error);
 
