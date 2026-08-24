@@ -15,6 +15,9 @@ const TEST_SERVER_ERROR = "[test:500]";
 const TEST_SLOW_RESPONSE = "[test:slow]";
 const TEST_MID_STREAM = "[test:midstream]";
 
+const MIDSTREAM_TEST_COOKIE =
+  "ai-qualification-midstream-tested";
+
 function getLastUserMessage(messages: UIMessage[]) {
   const lastUserMessage = messages.findLast(
     (message) => message.role === "user",
@@ -38,18 +41,34 @@ function delay(milliseconds: number) {
   });
 }
 
+function hasMidstreamTestCookie(request: Request) {
+  const cookies = request.headers.get("cookie") ?? "";
+
+  return cookies.includes(
+    `${MIDSTREAM_TEST_COOKIE}=1`,
+  );
+}
+
 function createInterruptedResponse(response: Response) {
   if (!response.body) {
-    return new Response("The AI response was interrupted.", {
-      status: 500,
-    });
+    return new Response(
+      "The AI response was interrupted.",
+      { status: 500 },
+    );
   }
 
   const reader = response.body.getReader();
+  const encoder = new TextEncoder();
+
   let receivedChunks = 0;
+  let interrupted = false;
 
   const interruptedStream = new ReadableStream<Uint8Array>({
     async pull(controller) {
+      if (interrupted) {
+        return;
+      }
+
       try {
         const { done, value } = await reader.read();
 
@@ -62,27 +81,60 @@ function createInterruptedResponse(response: Response) {
         receivedChunks += 1;
 
         if (receivedChunks >= 3) {
+          interrupted = true;
           await reader.cancel();
-          controller.error(
-            new Error(
-              "The connection was interrupted while the AI was responding.",
+
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: "error",
+                errorText:
+                  "The connection was interrupted while the AI was responding. Please retry the failed response.",
+              })}\n\n`,
             ),
           );
+
+          controller.close();
         }
-      } catch (error) {
-        controller.error(error);
+      } catch {
+        interrupted = true;
+
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({
+              type: "error",
+              errorText:
+                "The connection was interrupted while the AI was responding. Please retry the failed response.",
+            })}\n\n`,
+          ),
+        );
+
+        controller.close();
       }
     },
 
     async cancel(reason) {
+      interrupted = true;
       await reader.cancel(reason);
     },
   });
 
+  const headers = new Headers(response.headers);
+
+  /*
+   * This cookie makes the controlled failure happen only once.
+   * Clicking Retry sends the request again, but the second request
+   * is allowed to complete normally.
+   */
+  headers.set(
+    "Set-Cookie",
+    `${MIDSTREAM_TEST_COOKIE}=1; Path=/; Max-Age=300; SameSite=Lax`,
+  );
+
   return new Response(interruptedStream, {
     status: response.status,
     statusText: response.statusText,
-    headers: response.headers,
+    headers,
   });
 }
 
@@ -172,7 +224,9 @@ After the tool returns its result, briefly explain the most important recommenda
 
         if (
           error instanceof Error &&
-          error.message.includes("qualification service")
+          error.message.includes(
+            "qualification service",
+          )
         ) {
           return error.message;
         }
@@ -181,7 +235,11 @@ After the tool returns its result, briefly explain the most important recommenda
       },
     });
 
-    if (lastUserMessage === TEST_MID_STREAM) {
+    const shouldTestMidstreamFailure =
+      lastUserMessage === TEST_MID_STREAM &&
+      !hasMidstreamTestCookie(request);
+
+    if (shouldTestMidstreamFailure) {
       return createInterruptedResponse(response);
     }
 
