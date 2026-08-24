@@ -4,6 +4,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
@@ -14,6 +15,10 @@ import {
   DefaultChatTransport,
   type UIMessage,
 } from "ai";
+
+import QualificationToolCard, {
+  type QualificationToolPart,
+} from "./QualificationToolCard";
 
 const STORAGE_KEY = "ai-qualification-chat-messages";
 const MAX_CHARACTERS = 1500;
@@ -55,11 +60,33 @@ function getMessageText(message: UIMessage) {
     .join("");
 }
 
+function subscribeToOnlineStatus(callback: () => void) {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+function getOnlineStatus() {
+  return navigator.onLine;
+}
+
+function getServerOnlineStatus() {
+  return true;
+}
+
 export default function Chat() {
   const [input, setInput] = useState("");
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [isStorageLoaded, setIsStorageLoaded] = useState(false);
-  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const isOnline = useSyncExternalStore(
+    subscribeToOnlineStatus,
+    getOnlineStatus,
+    getServerOnlineStatus,
+  );
   const [notice, setNotice] = useState("");
   const [showClearConfirmation, setShowClearConfirmation] =
     useState(false);
@@ -118,28 +145,6 @@ export default function Chat() {
     );
 
   const showThinking = isGenerating && !hasAssistantText;
-
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-
-    function handleOnline() {
-      setIsOnline(true);
-      showNotice("Internet connection restored");
-    }
-
-    function handleOffline() {
-      setIsOnline(false);
-      showNotice("You are currently offline");
-    }
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
 
   useEffect(() => {
     try {
@@ -384,21 +389,15 @@ export default function Chat() {
               <h2>Project Intelligence</h2>
 
               <span
-                className={`connection-status ${
-                  isOnline === null
-                    ? "checking"
-                    : isOnline
-                      ? "online"
-                      : "offline"
-                }`}
+                className={
+                  isOnline
+                    ? "connection-status online"
+                    : "connection-status offline"
+                }
               >
                 <span aria-hidden="true" />
 
-                {isOnline === null
-                  ? "Checking"
-                  : isOnline
-                    ? "Online"
-                    : "Offline"}
+                {isOnline ? "Online" : "Offline"}
               </span>
             </div>
 
@@ -536,15 +535,30 @@ export default function Chat() {
               </strong>
 
               {message.parts.map((part, index) => {
-                if (part.type !== "text") {
-                  return null;
+                if (part.type === "text") {
+                  return (
+                    <p key={`${message.id}-${index}`}>
+                      {part.text}
+                    </p>
+                  );
                 }
 
-                return (
-                  <p key={`${message.id}-${index}`}>
-                    {part.text}
-                  </p>
-                );
+                const toolPart =
+                  part as unknown as QualificationToolPart;
+
+                if (
+                  toolPart.type ===
+                  "tool-scoreProjectQualification"
+                ) {
+                  return (
+                    <QualificationToolCard
+                      key={`${message.id}-${index}`}
+                      part={toolPart}
+                    />
+                  );
+                }
+
+                return null;
               })}
             </div>
           </article>

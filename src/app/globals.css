@@ -1161,3 +1161,366 @@ textarea:disabled {
     font-size: 0.7rem;
   }
 }
+
+/* ========================================
+   Project Qualification Tool
+======================================== */
+
+.tool-card,
+.tool-result-card {
+  width: min(100%, 620px);
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 16px;
+  animation: tool-state-enter 200ms ease-out;
+}
+
+.tool-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 17px;
+}
+
+.tool-card strong {
+  display: block;
+  margin: 4px 0 6px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.tool-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.tool-card small {
+  display: block;
+  margin-top: 8px;
+  color: #ff9bb0;
+  line-height: 1.45;
+}
+
+.tool-state-label {
+  display: block;
+  color: var(--blue-bright);
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.tool-state-icon {
+  display: grid;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  font-weight: 900;
+}
+
+/* State 1: Input streaming */
+
+.tool-input-streaming {
+  border: 1px dashed rgba(50, 181, 255, 0.55);
+  background:
+    linear-gradient(
+      110deg,
+      rgba(22, 140, 255, 0.07),
+      rgba(33, 230, 255, 0.13),
+      rgba(22, 140, 255, 0.07)
+    );
+  background-size: 200% 100%;
+  box-shadow: inset 0 0 22px rgba(22, 140, 255, 0.05);
+  animation:
+    tool-state-enter 200ms ease-out,
+    tool-input-shimmer 1.5s linear infinite;
+}
+
+.tool-spinner {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(50, 181, 255, 0.18);
+  border-top-color: var(--blue-bright);
+  border-radius: 50%;
+  animation: tool-spin 700ms linear infinite;
+}
+
+/* State 2: Input available */
+
+.tool-input-available {
+  border: 1px solid rgba(33, 230, 255, 0.55);
+  background: rgba(33, 230, 255, 0.07);
+  box-shadow:
+    inset 4px 0 0 var(--cyan),
+    0 0 20px rgba(33, 230, 255, 0.06);
+}
+
+.tool-input-available .tool-state-icon {
+  border: 1px solid var(--cyan);
+  background: rgba(33, 230, 255, 0.12);
+  color: var(--cyan);
+}
+
+/* State 3: Output error */
+
+.tool-output-error {
+  border: 1px solid rgba(255, 66, 104, 0.75);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 66, 104, 0.13),
+      rgba(86, 8, 31, 0.12)
+    );
+  box-shadow:
+    inset 4px 0 0 var(--danger),
+    0 0 22px rgba(255, 66, 104, 0.09);
+}
+
+.tool-output-error .tool-state-label {
+  color: #ff8aa3;
+}
+
+.tool-output-error .tool-state-icon {
+  border: 1px solid var(--danger);
+  background: rgba(255, 66, 104, 0.16);
+  color: #ff8aa3;
+}
+
+/* State 4: Output available */
+
+.tool-result-card {
+  border: 1px solid rgba(46, 242, 160, 0.48);
+  background:
+    linear-gradient(
+      145deg,
+      rgba(46, 242, 160, 0.05),
+      rgba(12, 24, 48, 0.96) 35%
+    );
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.04),
+    0 18px 45px rgba(0, 0, 0, 0.25);
+}
+
+.tool-result-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 19px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-result-card h3 {
+  margin: 5px 0 3px;
+  color: var(--text);
+  font-size: 1.15rem;
+}
+
+.tool-result-card header p {
+  margin: 0;
+  color: var(--success);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.tool-result-card .tool-state-label {
+  color: var(--success);
+}
+
+.total-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 88px;
+  height: 88px;
+  padding-top: 21px;
+  border: 2px solid var(--success);
+  border-radius: 50%;
+  background: rgba(46, 242, 160, 0.08);
+  color: var(--success);
+  box-shadow:
+    inset 0 0 20px rgba(46, 242, 160, 0.08),
+    0 0 18px rgba(46, 242, 160, 0.12);
+}
+
+.total-score strong {
+  font-size: 1.7rem;
+}
+
+.total-score span {
+  font-size: 0.72rem;
+}
+
+.score-grid {
+  display: grid;
+  gap: 14px;
+  padding: 19px;
+}
+
+.score-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.score-row strong {
+  color: var(--text);
+}
+
+.score-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #101b2e;
+}
+
+.score-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--blue),
+    var(--cyan),
+    var(--success)
+  );
+  box-shadow: 0 0 10px rgba(46, 242, 160, 0.35);
+  transition: width 300ms ease;
+}
+
+.tool-findings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 19px 19px;
+}
+
+.tool-findings > div {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(4, 11, 25, 0.45);
+}
+
+.tool-findings h4 {
+  margin: 0 0 9px;
+  font-size: 0.78rem;
+}
+
+.strength-list h4 {
+  color: var(--success);
+}
+
+.risk-list h4 {
+  color: #ffb36b;
+}
+
+.tool-findings ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 17px;
+}
+
+.tool-findings li,
+.tool-findings p {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.tool-findings p {
+  margin: 0;
+}
+
+.tool-result-card > footer {
+  padding: 15px 19px;
+  border-top: 1px solid var(--border);
+  background: rgba(22, 140, 255, 0.06);
+}
+
+.tool-result-card footer span {
+  color: var(--blue-bright);
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tool-result-card footer p {
+  margin: 5px 0 0;
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+@keyframes tool-state-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tool-input-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .tool-card,
+  .tool-result-card {
+    width: 100%;
+  }
+
+  .tool-result-card > header {
+    align-items: flex-start;
+  }
+
+  .total-score {
+    width: 72px;
+    height: 72px;
+    padding-top: 16px;
+  }
+
+  .total-score strong {
+    font-size: 1.35rem;
+  }
+
+  .tool-findings {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .tool-result-card > header {
+    flex-direction: column;
+  }
+
+  .total-score {
+    width: 100%;
+    height: auto;
+    padding: 12px;
+    border-radius: 12px;
+  }
+}

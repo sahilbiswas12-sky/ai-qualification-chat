@@ -34,3 +34,46 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Server-Side Tool Contract
+
+### `scoreProjectQualification`
+
+Scores a proposed software project using the information collected during the qualification conversation. The tool executes only on the server through the `/api/chat` route.
+
+**Definition file**
+
+`src/lib/tools/score-project-qualification.ts`
+
+**Input schema**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `projectName` | `string` | Yes | Name or short title of the project |
+| `problem` | `string` | Yes | Specific problem the project will solve |
+| `targetUsers` | `string` | Yes | Primary users of the project |
+| `coreFeatures` | `string[]` | Yes | One to eight important MVP features |
+| `technology` | `string` | No | Proposed development technology |
+| `timeline` | `string` | No | Expected development timeline |
+| `budget` | `string` | No | Available budget or resource constraints |
+
+**Return shape**
+
+```ts
+interface ProjectQualificationResult {
+  projectName: string;
+  totalScore: number;
+  readinessLevel:
+    | "Needs clarification"
+    | "Promising"
+    | "Ready to plan";
+  categoryScores: {
+    problemClarity: number;
+    audienceClarity: number;
+    scopeClarity: number;
+    deliveryClarity: number;
+  };
+  strengths: string[];
+  risks: string[];
+  recommendation: string;
+}
