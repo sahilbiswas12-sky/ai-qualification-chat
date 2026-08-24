@@ -88,6 +88,7 @@ export default function Chat() {
     getServerOnlineStatus,
   );
   const [notice, setNotice] = useState("");
+  const [isRetrying, setIsRetrying] = useState(false);
   const [showClearConfirmation, setShowClearConfirmation] =
     useState(false);
 
@@ -100,6 +101,7 @@ export default function Chat() {
     messages,
     setMessages,
     sendMessage,
+    regenerate,
     status,
     stop,
     error,
@@ -274,10 +276,38 @@ export default function Chat() {
     }
   }
 
+  async function retryFailedMessage() {
+    if (isGenerating || isRetrying || isOnline === false) {
+      return;
+    }
+
+    const failedMessage = messages.at(-1);
+
+    if (!failedMessage) {
+      showNotice("No failed message is available to retry.");
+      return;
+    }
+
+    setIsRetrying(true);
+    setIsPinnedToBottom(true);
+
+    try {
+      await regenerate({
+        messageId: failedMessage.id,
+      });
+    } catch {
+      showNotice("Retry failed. Please check your connection.");
+    } finally {
+      setIsRetrying(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitMessage(input);
   }
+
+  
 
   function handleKeyDown(
     event: KeyboardEvent<HTMLTextAreaElement>,
@@ -584,12 +614,27 @@ export default function Chat() {
 
         {error && (
           <div className="error-message" role="alert">
-            <strong>Generation failed</strong>
+            <div>
+              <strong>Response interrupted</strong>
 
-            <p>
-              {error.message ||
-                "Something went wrong. Please try again."}
-            </p>
+              <p>
+                {error.message ||
+                  "The AI response could not be completed. Your conversation is still available."}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={retryFailedMessage}
+              disabled={
+                isGenerating ||
+                isRetrying ||
+                isOnline === false
+              }
+              aria-label="Retry the failed AI response"
+            >
+              {isRetrying ? "Retrying..." : "Retry failed response"}
+            </button>
           </div>
         )}
 
