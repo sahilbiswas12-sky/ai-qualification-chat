@@ -60,6 +60,40 @@ function getMessageText(message: UIMessage) {
     .join("");
 }
 
+interface StreamErrorPart {
+  type: "error";
+  errorText?: string;
+}
+
+function getStreamErrorText(messages: UIMessage[]) {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
+    const message = messages[messageIndex];
+
+    for (
+      let partIndex = message.parts.length - 1;
+      partIndex >= 0;
+      partIndex -= 1
+    ) {
+      const part = message.parts[
+        partIndex
+      ] as unknown as StreamErrorPart;
+
+      if (part.type === "error") {
+        return (
+          part.errorText ||
+          "The AI response was interrupted. Please retry the failed response."
+        );
+      }
+    }
+  }
+
+  return "";
+}
+
 function subscribeToOnlineStatus(callback: () => void) {
   window.addEventListener("online", callback);
   window.addEventListener("offline", callback);
@@ -88,6 +122,7 @@ export default function Chat() {
     getServerOnlineStatus,
   );
   const [notice, setNotice] = useState("");
+  const [isRetrying, setIsRetrying] = useState(false);
   const [showClearConfirmation, setShowClearConfirmation] =
     useState(false);
 
@@ -100,6 +135,7 @@ export default function Chat() {
     messages,
     setMessages,
     sendMessage,
+    regenerate,
     status,
     stop,
     error,
@@ -137,6 +173,9 @@ export default function Chat() {
     completedSteps === qualificationSteps.length && !isGenerating;
 
   const lastMessage = messages.at(-1);
+  const streamErrorText = getStreamErrorText(messages);
+  const activeErrorMessage =
+    error?.message || streamErrorText;
 
   const hasAssistantText =
     lastMessage?.role === "assistant" &&
@@ -274,10 +313,38 @@ export default function Chat() {
     }
   }
 
+  async function retryFailedMessage() {
+    if (isGenerating || isRetrying || isOnline === false) {
+      return;
+    }
+
+    const failedMessage = messages.at(-1);
+
+    if (!failedMessage) {
+      showNotice("No failed message is available to retry.");
+      return;
+    }
+
+    setIsRetrying(true);
+    setIsPinnedToBottom(true);
+
+    try {
+      await regenerate({
+        messageId: failedMessage.id,
+      });
+    } catch {
+      showNotice("Retry failed. Please check your connection.");
+    } finally {
+      setIsRetrying(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitMessage(input);
   }
+
+  
 
   function handleKeyDown(
     event: KeyboardEvent<HTMLTextAreaElement>,
@@ -582,14 +649,28 @@ export default function Chat() {
           </div>
         )}
 
-        {error && (
+        {activeErrorMessage && (
           <div className="error-message" role="alert">
-            <strong>Generation failed</strong>
+            <div>
+              <strong>Response interrupted</strong>
 
-            <p>
-              {error.message ||
-                "Something went wrong. Please try again."}
-            </p>
+              <p>
+                {activeErrorMessage}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={retryFailedMessage}
+              disabled={
+                isGenerating ||
+                isRetrying ||
+                isOnline === false
+              }
+              aria-label="Retry the failed AI response"
+            >
+              {isRetrying ? "Retrying..." : "Retry failed response"}
+            </button>
           </div>
         )}
 

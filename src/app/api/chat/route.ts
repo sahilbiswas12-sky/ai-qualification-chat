@@ -10,17 +10,151 @@ import { scoreProjectQualification } from "@/lib/tools/score-project-qualificati
 
 export const maxDuration = 30;
 
+const TEST_RATE_LIMIT = "[test:429]";
+const TEST_SERVER_ERROR = "[test:500]";
+const TEST_SLOW_RESPONSE = "[test:slow]";
+const TEST_MID_STREAM = "[test:midstream]";
+
+const MIDSTREAM_TEST_COOKIE =
+  "ai-qualification-midstream-tested";
+
+function getLastUserMessage(messages: UIMessage[]) {
+  const lastUserMessage = messages.findLast(
+    (message) => message.role === "user",
+  );
+
+  if (!lastUserMessage) {
+    return "";
+  }
+
+  return lastUserMessage.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("")
+    .trim()
+    .toLowerCase();
+}
+
+function delay(milliseconds: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function hasMidstreamTestCookie(request: Request) {
+  const cookies = request.headers.get("cookie") ?? "";
+
+  return cookies.includes(
+    `${MIDSTREAM_TEST_COOKIE}=1`,
+  );
+}
+
+function createInterruptedResponse() {
+  const encoder = new TextEncoder();
+
+  const events = [
+    {
+      type: "start",
+      messageId: `test-${Date.now()}`,
+    },
+    {
+      type: "text-start",
+      id: "test-text",
+    },
+    {
+      type: "text-delta",
+      id: "test-text",
+      delta: "Analyzing your project requirements...",
+    },
+    {
+      type: "error",
+      errorText:
+        "The connection was interrupted while the AI was responding. Please retry the failed response.",
+    },
+  ];
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      for (const event of events) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify(event)}\n\n`,
+          ),
+        );
+
+        await delay(350);
+      }
+
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "x-vercel-ai-ui-message-stream": "v1",
+      "Set-Cookie": `${MIDSTREAM_TEST_COOKIE}=1; Path=/; Max-Age=300; SameSite=Lax`,
+    },
+  });
+}
+
 export async function POST(request: Request) {
   try {
     if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      return Response.json(
-        { error: "Gemini API key is missing." },
+      return new Response(
+        "The AI service is not configured. Please contact the administrator.",
         { status: 500 },
       );
     }
 
-    const { messages }: { messages: UIMessage[] } =
-      await request.json();
+    const body = (await request.json()) as {
+      messages?: UIMessage[];
+    };
+
+    const messages = body.messages ?? [];
+
+    if (messages.length === 0) {
+      return new Response(
+        "Please enter a project idea before sending.",
+        { status: 400 },
+      );
+    }
+
+    const lastUserMessage = getLastUserMessage(messages);
+
+    const shouldTestMidstreamFailure =
+      lastUserMessage === TEST_MID_STREAM &&
+      !hasMidstreamTestCookie(request);
+
+    if (shouldTestMidstreamFailure) {
+      return createInterruptedResponse();
+    }
+
+    if (lastUserMessage === TEST_RATE_LIMIT) {
+      return new Response(
+        "The AI service is receiving too many requests. Please wait a moment and retry the failed response.",
+        {
+          status: 429,
+          headers: {
+            "Retry-After": "5",
+          },
+        },
+      );
+    }
+
+    if (lastUserMessage === TEST_SERVER_ERROR) {
+      return new Response(
+        "The AI service is temporarily unavailable. Please retry the failed response.",
+        { status: 500 },
+      );
+    }
+
+    if (lastUserMessage === TEST_SLOW_RESPONSE) {
+      await delay(5000);
+    }
 
     const result = streamText({
       model: chatModel,
@@ -61,19 +195,28 @@ After the tool returns its result, briefly explain the most important recommenda
 
         if (
           error instanceof Error &&
-          error.message.includes("qualification service")
+          error.message.includes(
+            "qualification service",
+          )
         ) {
           return error.message;
         }
 
-        return "Gemini could not generate a response.";
+        return "The AI response was interrupted. Please retry the failed response.";
       },
     });
   } catch (error) {
     console.error("Chat route error:", error);
 
-    return Response.json(
-      { error: "Unable to generate a response." },
+    if (error instanceof SyntaxError) {
+      return new Response(
+        "The request contained invalid information. Please try again.",
+        { status: 400 },
+      );
+    }
+
+    return new Response(
+      "Unable to generate a response. Please retry the failed response.",
       { status: 500 },
     );
   }
