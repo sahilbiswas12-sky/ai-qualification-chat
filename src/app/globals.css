@@ -215,7 +215,7 @@ main > header > p:last-child {
   gap: 5px;
   padding: 4px 8px;
   border-radius: 999px;
-  font-size: 0.67rem;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
@@ -366,7 +366,7 @@ main > header > p:last-child {
 .conversation-stats span {
   margin-top: 2px;
   color: var(--muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
 }
 
 .messages-panel {
@@ -751,7 +751,7 @@ textarea:disabled {
   border-radius: 5px;
   background: var(--panel);
   color: #6e8db5;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   pointer-events: none;
 }
 
@@ -1630,4 +1630,9 @@ textarea:disabled {
   background: var(--blue);
   color: white;
   font-weight: 800;
+}
+
+.route-error-card button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 22px rgba(22, 140, 255, 0.28);
 }
