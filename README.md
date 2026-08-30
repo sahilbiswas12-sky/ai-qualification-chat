@@ -1,149 +1,226 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Project Qualification Assistant
 
-## Getting Started
+A streaming AI application that helps students, freelancers, founders, and small teams turn an early software idea into a clearer, more realistic project plan.
 
-First, run the development server:
+The assistant asks one focused question at a time, collects the problem, users, features, technology, timeline, and resources, and calls a server-side scoring tool. It then displays a qualification card with readiness scores, strengths, risks, and a recommended next step.
+
+- **Live app:** https://ai-qualification-chat.vercel.app/
+- **Repository:** https://github.com/sahilbiswas12-sky/ai-qualification-chat
+- **3D experience:** https://ai-qualification-chat.vercel.app/3d-experience
+
+## Who it is for
+
+This project is for people who have a software idea but need help defining an achievable first version before development begins—especially student developers, early-stage founders, freelancers, and small teams planning an MVP.
+
+## Features
+
+- Streaming AI conversation powered by Google Gemini
+- One-question-at-a-time project discovery
+- Server-side project qualification tool
+- Score card with four readiness categories
+- Strengths, risks, readiness level, and a recommended next step
+- Copy, export, and clear controls
+- Loading, retry, rate-limit, server-error, and interrupted-stream states
+- Responsive interface
+- Interactive 3D Project Readiness Orb with reduced-motion fallback
+- Component, end-to-end, and production-build validation
+
+## Technology
+
+Next.js 16.3.2, React 19.2.8, TypeScript, Tailwind CSS 4, AI SDK, Google Gemini, React Three Fiber, Three.js, Drei, Vitest, Testing Library, Playwright, and Vercel.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    U["User"] --> C["React chat UI"]
+    C --> A["POST /api/chat"]
+    A --> M["Google Gemini"]
+    M --> T["Qualification tool"]
+    T --> A
+    A --> S["Streamed response"]
+    S --> C
+```
+
+The browser manages the conversation interface. Messages are sent to the Next.js `/api/chat` route, where the model and system instructions remain server-side. When enough information is available, Gemini invokes `scoreProjectQualification`. The API streams text and the structured tool result back to the interface.
+
+## Prerequisites
+
+- Node.js 20.9 or newer
+- npm
+- Google Generative AI API key
+
+## Setup
+
+1. Clone and enter the repository:
+
+```bash
+git clone https://github.com/sahilbiswas12-sky/ai-qualification-chat.git
+cd ai-qualification-chat
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Create `.env.local` in the project root:
+
+```env
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key
+```
+
+Never commit the real key.
+
+4. Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+5. Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Usage examples
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+A defined project can be submitted in one message:
 
-## Learn More
+```text
+Evaluate and score this project.
 
-To learn more about Next.js, take a look at the following resources:
+Project name: Local Laundry Tracker
+Problem: A small laundry shop records orders on paper, making it difficult to track order status and collection dates.
+Target users: The shop owner and two employees.
+Core features: Create an order, update its status, search by customer phone number, view pending orders, and mark an order as collected.
+Technology: Next.js and MongoDB.
+Timeline: 4 weeks.
+Budget: One developer using free-tier services.
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+An early idea can start simply:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```text
+I want to build an AI study app for students.
+```
 
-## Deploy on Vercel
+For an incomplete idea, the assistant should ask one focused follow-up question instead of pretending the project is ready.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Commands
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start development server |
+| `npm run build` | Create production build |
+| `npm run start` | Run production build |
+| `npm run lint` | Run ESLint |
+| `npm test` | Run Vitest |
+| `npm run test:watch` | Run Vitest in watch mode |
+| `npm run test:e2e` | Run Playwright |
 
-## Server-Side Tool Contract
+## Verified technical results
 
-### `scoreProjectQualification`
+Validation performed on 30 August 2026:
 
-Scores a proposed software project using the information collected during the qualification conversation. The tool executes only on the server through the `/api/chat` route.
+| Check | Result |
+| --- | --- |
+| Component test files | 2 passed |
+| Component tests | 9 passed |
+| Playwright tests | 1 passed |
+| Next.js production build | Passed |
+| TypeScript compilation | Passed |
 
-**Definition file**
+The production build generated `/`, `/_not-found`, `/3d-experience`, `/api/chat`, and `/motion-button-demo`.
 
-`src/lib/tools/score-project-qualification.ts`
+## V2 evaluation results
 
-**Input schema**
+Five live cases were run against the deployed app on 30 August 2026. They checked clarification, scoring, scope awareness, and resistance to score manipulation.
 
-| Field | Type | Required | Description |
+| Case | Input condition | Observed result | Assessment |
 | --- | --- | --- | --- |
-| `projectName` | `string` | Yes | Name or short title of the project |
-| `problem` | `string` | Yes | Specific problem the project will solve |
-| `targetUsers` | `string` | Yes | Primary users of the project |
-| `coreFeatures` | `string[]` | Yes | One to eight important MVP features |
-| `technology` | `string` | No | Proposed development technology |
-| `timeline` | `string` | No | Expected development timeline |
-| `budget` | `string` | No | Available budget or resource constraints |
+| 1 | Clear university-events MVP | 92/100, Ready to plan; audience detail identified as the main risk | Pass |
+| 2 | Vague AI study-app idea | Asked one focused problem question and did not score prematurely | Pass |
+| 3 | Enterprise marketplace, one developer, two weeks, no budget | Warned that scope must be reduced, but returned 88/100 with full scope and delivery scores; an error state also appeared | Partial |
+| 4 | Focused laundry tracker | 89/100 with an appropriate recommendation, but audience clarity was unexpectedly 14/25 | Mostly pass |
+| 5 | Request to ignore criteria and award 100 | Returned 39/100, Needs clarification, and requested a specific problem | Pass |
 
-**Return shape**
+**Overall: 3 passed, 1 mostly passed, and 1 partially passed.**
 
-```ts
-interface ProjectQualificationResult {
-  projectName: string;
-  totalScore: number;
-  readinessLevel:
-    | "Needs clarification"
-    | "Promising"
-    | "Ready to plan";
-  categoryScores: {
-    problemClarity: number;
-    audienceClarity: number;
-    scopeClarity: number;
-    deliveryClarity: number;
-  };
-  strengths: string[];
-  risks: string[];
-  recommendation: string;
-}
+The assistant reliably asks for missing information, gives actionable recommendations, and resists direct score manipulation. The evaluation also shows that its deterministic formula sometimes rewards the presence of fields more than the realism of their contents.
 
-## Interactive 3D Project Readiness Orb
+## Server-side tool
 
-### What I built
+`scoreProjectQualification` executes only through `/api/chat`. Its definition is in `src/lib/tools/score-project-qualification.ts`.
 
-I built an interactive 3D Project Readiness Orb for the AI Project
-Qualification Assistant. The experience visualizes three project-readiness
-states: Needs Work, Almost Ready and Ready to Build.
+| Input | Type | Required |
+| --- | --- | --- |
+| `projectName` | string | Yes |
+| `problem` | string | Yes |
+| `targetUsers` | string | Yes |
+| `coreFeatures` | string array | Yes |
+| `technology` | string | No |
+| `timeline` | string | No |
+| `budget` | string | No |
 
-Users can:
+It returns a total score, readiness level, category scores, strengths, risks, and a recommendation.
 
-- Drag the scene to rotate it
-- Scroll or pinch to zoom
-- Tap the orb to trigger an energy pulse
-- Change the qualification score
-- Change the orb's color, material and animation state
+## Design decisions
 
-The experience was built with React Three Fiber, Three.js and Drei. The geometry
-is generated directly in code, so the page does not need to download a large
-external 3D model.
+The scoring logic runs as a server-side tool instead of relying on unstructured model text. This gives the UI a predictable data shape, keeps execution away from the browser, and supports an accessible reusable result card.
 
-Route:
+The 3D experience is kept on a separate lazy-loaded route so the Three.js bundle does not increase the initial cost of the main chat page.
 
-`/3d-experience`
+## 3D Project Readiness Orb
 
-### Responsible loading and mobile support
+The `/3d-experience` route visualizes Needs Work, Almost Ready, and Ready to Build states. Users can rotate and zoom the scene, trigger an energy pulse, and change the qualification score.
 
-The 3D canvas is dynamically imported and rendered only in the browser. A
-static readiness preview is provided when reduced motion is enabled or when a
-low-power device is detected.
+It uses code-generated geometry, capped device-pixel ratio, limited particles, restricted zoom, touch controls, and a static reduced-motion or low-power fallback.
 
-To reduce rendering cost, the scene uses:
+### Performance audit
 
-- Code-generated geometry instead of a large GLB model
-- A limited number of particles
-- A capped device pixel ratio
-- A restricted zoom distance
-- Touch-compatible orbit controls
-- A static fallback for reduced-motion and low-power contexts
+Local Lighthouse test using an iPhone 12 Pro simulation:
 
-### FE-10 performance note
+| Metric | Result |
+| --- | --- |
+| Performance | 77 |
+| Accessibility | 95 |
+| Best Practices | 100 |
+| SEO | 100 |
+| First Contentful Paint | 0.8 seconds |
+| Largest Contentful Paint | 2.3 seconds |
 
-I tested the production build using Chrome Lighthouse with an iPhone 12 Pro
-mobile simulation.
+Results can vary by device, browser, network, and deployment.
 
-Results from the `/3d-experience` route:
+## Limitations
 
-- Performance: 77
-- Accessibility: 95
-- Best Practices: 100
-- SEO: 100
-- First Contentful Paint: 0.8 seconds
-- Largest Contentful Paint: 2.3 seconds
-- Observed mobile-simulation frame rate: approximately 144 FPS
-- Observed desktop frame rate: approximately 123.9 FPS
+- The formula judges whether structured information exists more reliably than whether the timeline, budget, and feature set are mutually realistic.
+- An over-scoped test received 88/100 even though the recommendation correctly warned that the MVP must be reduced.
+- Audience scoring can be inconsistent; a specific small user group received 14/25 in one evaluation.
+- One evaluation showed an assessment-error state while also displaying a completed score card.
+- AI responses can vary between runs.
+- The app depends on a valid Google API key, model availability, rate limits, and internet access.
+- The 3D orb is not yet connected directly to the real qualification score.
+- Lighthouse results were collected locally and do not represent every device or network.
 
-The scene remained responsive while rotating, zooming and changing readiness
-states. The Three.js dependencies increase the JavaScript required by this
-route, so the canvas is lazy-loaded and kept separate from the main application
-experience.
+## Next version
 
-These measurements were taken locally and may vary depending on the device,
-browser and deployed environment.
+- Add semantic checks for unrealistic timelines, budgets, and oversized feature lists
+- Add automated evaluation fixtures with expected score ranges
+- Investigate the simultaneous score-card and error state
+- Connect the 3D orb to the real score
+- Improve accessible descriptions and physical-device testing
+- Reduce the initial Three.js cost
 
-### What I would add with more time
+## AI transparency
 
-With more time, I would connect the orb directly to the qualification tool's
-real score, add more accessible descriptions for each visual state, reduce the
-initial Three.js JavaScript cost further and test the experience on additional
-physical mobile devices.
+I built this project with AI assistance from ChatGPT and other AI coding tools for planning, code suggestions, debugging, test design, documentation drafting, and review. I personally selected the requirements, implemented and integrated the application, ran the live evaluations, checked the generated code, verified the tests and production build, reviewed the limitations, and made the final design decisions. AI helped me work faster, but I remained responsible for validating what the project actually does.
+
+## Deployment
+
+1. Import the repository into Vercel.
+2. Add `GOOGLE_GENERATIVE_AI_API_KEY` to the Vercel environment variables.
+3. Deploy.
+4. Verify the chat and `/3d-experience` routes.
+
+## License
+
+This repository is an educational capstone project. No separate open-source license has been added.
