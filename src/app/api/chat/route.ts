@@ -6,17 +6,21 @@ import {
 } from "ai";
 
 import { chatModel, systemPrompt } from "@/lib/ai-config";
+import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limit";
 import { scoreProjectQualification } from "@/lib/tools/score-project-qualification";
 
 export const maxDuration = 30;
+
+const MAX_REQUEST_BYTES = 32_000;
+const MAX_MESSAGES = 20;
+const MAX_TEXT_CHARACTERS = 8_000;
 
 const TEST_RATE_LIMIT = "[test:429]";
 const TEST_SERVER_ERROR = "[test:500]";
 const TEST_SLOW_RESPONSE = "[test:slow]";
 const TEST_MID_STREAM = "[test:midstream]";
 
-const MIDSTREAM_TEST_COOKIE =
-  "ai-qualification-midstream-tested";
+const MIDSTREAM_TEST_COOKIE = "ai-qualification-midstream-tested";
 
 function getLastUserMessage(messages: UIMessage[]) {
   const lastUserMessage = messages.findLast(
@@ -35,6 +39,39 @@ function getLastUserMessage(messages: UIMessage[]) {
     .toLowerCase();
 }
 
+function countTextCharacters(messages: UIMessage[]) {
+  return messages.reduce((messageTotal, message) => {
+    const partTotal = message.parts.reduce((total, part) => {
+      if (part.type !== "text") {
+        return total;
+      }
+
+      return total + part.text.length;
+    }, 0);
+
+    return messageTotal + partTotal;
+  }, 0);
+}
+
+function isValidMessageList(value: unknown): value is UIMessage[] {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  return value.every((message) => {
+    if (
+      typeof message !== "object" ||
+      message === null ||
+      !("role" in message) ||
+      !("parts" in message)
+    ) {
+      return false;
+    }
+
+    return typeof message.role === "string" && Array.isArray(message.parts);
+  });
+}
+
 function delay(milliseconds: number) {
   return new Promise<void>((resolve) => {
     setTimeout(resolve, milliseconds);
@@ -44,9 +81,7 @@ function delay(milliseconds: number) {
 function hasMidstreamTestCookie(request: Request) {
   const cookies = request.headers.get("cookie") ?? "";
 
-  return cookies.includes(
-    `${MIDSTREAM_TEST_COOKIE}=1`,
-  );
+  return cookies.includes(`${MIDSTREAM_TEST_COOKIE}=1`);
 }
 
 function createInterruptedResponse() {
@@ -77,9 +112,7 @@ function createInterruptedResponse() {
     async start(controller) {
       for (const event of events) {
         controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify(event)}\n\n`,
-          ),
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
         );
 
         await delay(350);
@@ -103,6 +136,28 @@ function createInterruptedResponse() {
 
 export async function POST(request: Request) {
   try {
+    /*
+     * Apply rate limiting before calling the AI provider so repeated
+     * requests cannot trivially consume API credits.
+     */
+    const clientIdentifier = getClientIdentifier(request);
+
+    const rateLimit = checkRateLimit(clientIdentifier);
+
+    if (!rateLimit.allowed) {
+      return new Response(
+        "Too many requests. Please wait before sending another message.",
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfter),
+            "X-RateLimit-Limit": String(rateLimit.limit),
+            "X-RateLimit-Remaining": "0",
+          },
+        },
+      );
+    }
+
     if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
       return new Response(
         "The AI service is not configured. Please contact the administrator.",
@@ -110,24 +165,73 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = (await request.json()) as {
-      messages?: UIMessage[];
+    /*
+     * Reject clearly oversized requests before reading and parsing
+     * the complete request body.
+     */
+    const contentLengthHeader = request.headers.get("content-length");
+
+    if (contentLengthHeader) {
+      const contentLength = Number(contentLengthHeader);
+
+      if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
+        return new Response(
+          "The request is too large. Please shorten your project description.",
+          { status: 413 },
+        );
+      }
+    }
+
+    /*
+     * Measure the actual encoded body as content-length may not
+     * always be present.
+     */
+    const rawBody = await request.text();
+    const requestBytes = new TextEncoder().encode(rawBody).length;
+
+    if (requestBytes > MAX_REQUEST_BYTES) {
+      return new Response(
+        "The request is too large. Please shorten your project description.",
+        { status: 413 },
+      );
+    }
+
+    const body = JSON.parse(rawBody) as {
+      messages?: unknown;
     };
 
-    const messages = body.messages ?? [];
+    if (!isValidMessageList(body.messages)) {
+      return new Response("The request must contain a valid message list.", {
+        status: 400,
+      });
+    }
+
+    const messages = body.messages;
 
     if (messages.length === 0) {
+      return new Response("Please enter a project idea before sending.", {
+        status: 400,
+      });
+    }
+
+    if (messages.length > MAX_MESSAGES) {
       return new Response(
-        "Please enter a project idea before sending.",
+        "This conversation is too long. Please start a new conversation.",
         { status: 400 },
+      );
+    }
+
+    if (countTextCharacters(messages) > MAX_TEXT_CHARACTERS) {
+      return new Response(
+        "The conversation contains too much text. Please shorten your project description.",
+        { status: 413 },
       );
     }
 
     const lastUserMessage = getLastUserMessage(messages);
 
     const shouldTestMidstreamFailure =
-      lastUserMessage === TEST_MID_STREAM &&
-      !hasMidstreamTestCookie(request);
+      lastUserMessage === TEST_MID_STREAM && !hasMidstreamTestCookie(request);
 
     if (shouldTestMidstreamFailure) {
       return createInterruptedResponse();
@@ -195,9 +299,7 @@ After the tool returns its result, briefly explain the most important recommenda
 
         if (
           error instanceof Error &&
-          error.message.includes(
-            "qualification service",
-          )
+          error.message.includes("qualification service")
         ) {
           return error.message;
         }
