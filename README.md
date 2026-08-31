@@ -305,130 +305,79 @@ Tests cover message submission, streamed responses, accessible errors, form vali
 
 ## v2 evaluation results
 
-I manually evaluated the deployed v2 application on 31 August 2026 using five representative cases. These checks supplement the automated tests; they do not prove that every possible model response will behave identically.
+I evaluated the deployed v2 application on 31 August 2026 using five representative scenarios. These checks supplement the automated tests and do not guarantee identical results for every model response.
 
 | Case | Input or condition | Expected behaviour | Observed result | Status |
-| ---- | ------------------ | ------------------ | --------------- | ------ |
-| Complete project | TaskFlow AI with problem, users, features, technology, timeline and budget | Generate the final structured assessment | Displayed an 86/100 score, “Ready to plan” status, category scores, strengths, risks and recommendation | Pass |
-| Incomplete idea | A food-delivery app without supporting details | Ask a focused clarification question without inventing a score | Asked what specific problem the app should solve and did not generate a premature score | Pass |
-| Rate limit | `[test:429]` | Explain the interruption and provide recovery | Displayed a clear rate-limit message and a “Retry failed response” action | Pass |
-| Prompt injection | Request to reveal the hidden system prompt and configuration | Protect hidden instructions and stay within role | Revealed no hidden configuration and redirected to project qualification | Pass |
-| Out-of-scope request | Request for a poem and an unrelated factual answer | Remain focused on project qualification | Declined the diversion and invited the user to describe a project idea | Pass |
+| --- | --- | --- | --- | --- |
+| Complete project | TaskFlow AI with its problem, users, features, technology, timeline and budget | Generate a structured final assessment | Displayed an 86/100 score with the “Ready to plan” readiness level, category scores, strengths, risks and a recommendation | Pass |
+| Incomplete project | A food-delivery application without sufficient project details | Ask for missing information instead of inventing it | Asked a focused clarification question before attempting to score the project | Pass |
+| Rate limit | Entered `[test:429]` | Display an understandable rate-limit error | Displayed the rate-limit error and allowed the user to retry | Pass |
+| Server failure | Entered `[test:500]` | Display an accessible server-error state | Displayed an error message with a retry action instead of leaving the interface stuck | Pass |
+| Interrupted stream | Entered `[test:midstream]` | Handle an interrupted response without crashing | Reported the interrupted response and kept the interface usable for another attempt | Pass |
 
-**Summary:** 5 of 5 manual evaluation cases passed. Component tests also passed 9 of 9, the Playwright end-to-end test passed 1 of 1 and the Next.js production build completed successfully.
+### Evaluation summary
 
-**Evaluation limitation:** Model output is probabilistic, so wording and scores may vary between runs. These results describe the recorded test runs rather than guaranteeing identical future responses.
+- Manual scenarios passed: 5 of 5
+- Component tests passed: 9 of 9
+- Component test files passed: 2 of 2
+- End-to-end tests passed: 1 of 1
+- Production build: successful
 
-## Interactive 3D readiness experience
+The evaluation showed that the main qualification flow, clarification behaviour and recovery states work as intended. Model-generated wording and scores may still vary because the application uses a generative AI model.
 
-The `/3d-experience` route visualizes three readiness states:
+## Design decisions
 
-- Needs Work
-- Almost Ready
-- Ready to Build
+### Structured server-side qualification tool
 
-Users can rotate and zoom the scene, trigger an energy pulse and change the qualification score. The geometry is generated in code instead of loading a large external model.
+I separated project scoring from the normal conversational response. Gemini gathers and interprets the project information, but the `scoreProjectQualification` tool validates the required fields and returns a predictable data structure.
 
-Performance decisions include:
+This decision makes the result easier to test and allows the interface to render a consistent score card instead of trying to extract scores from unstructured model text.
 
-- Dynamically loading the canvas in the browser
-- Capping the device pixel ratio
-- Limiting the particle count
-- Restricting zoom distance
-- Supporting touch controls
-- Providing a static fallback for reduced-motion and low-power devices
+### Streaming responses
 
-A local Chrome Lighthouse audit using an iPhone 12 Pro simulation produced:
+The application streams responses so users can start reading without waiting for the entire model output. This improves perceived responsiveness, especially when the model needs several seconds to complete an answer.
 
-| Metric                   | Result      |
-| ------------------------ | ----------- |
-| Performance              | 77          |
-| Accessibility            | 95          |
-| Best Practices           | 100         |
-| SEO                      | 100         |
-| First Contentful Paint   | 0.8 seconds |
-| Largest Contentful Paint | 2.3 seconds |
+### Accessible recovery states
 
-Results can vary by device, browser, network and deployment.
+Errors, pending states and tool states are shown explicitly. Users can stop generation or retry after a failure, and important errors use accessible alert semantics.
 
-## Technical decisions
+## Limitations
 
-### Streaming instead of waiting for a complete response
-
-Streaming gives the user immediate feedback and makes longer AI responses feel more responsive.
-
-### Server-only API key
-
-The Google API key is read only inside the server route. It is never placed in a `NEXT_PUBLIC_` variable or sent to the browser.
-
-### Structured tool output
-
-Qualification results are returned as structured data instead of unstructured model text. This makes the score predictable, testable and suitable for a dedicated interface component.
-
-### One question at a time
-
-The system prompt directs the assistant to ask one focused question at a time. This reduces cognitive load and creates a clearer discovery flow.
-
-### Lightweight rate limiter
-
-An in-memory limiter avoids adding another paid service to the demonstration project. The limitation is documented instead of presenting it as a fully distributed security control.
-
-### Separate 3D route
-
-The Three.js experience is isolated from the primary chat route so its larger JavaScript bundle does not affect the initial chat experience.
-
-## How AI tools helped build this project
-
-I used ChatGPT as a development partner during planning, implementation and debugging. It helped me:
-
-- Break the assignment requirements into smaller implementation steps
-- Design the streaming chat states and qualification tool contract
-- Identify likely causes of API, hydration and streaming errors
-- Suggest component and end-to-end test cases
-- Review accessibility concerns such as error announcements and button states
-- Plan production safeguards and organize this README
-
-I did not treat generated code as automatically correct. I selected the product behavior, supplied the project requirements, applied the changes, inspected errors and verified the result by running Vitest, Playwright and the Next.js production build. When generated suggestions caused errors or did not match the installed library versions, I used the terminal output to revise them.
-
-The final architecture and trade-offs remain my responsibility. In particular, I chose to keep the qualification tool server-side, limit conversation input before calling the model and document the limitation of the in-memory rate limiter honestly.
-
-## Deployment
-
-The application is deployed on Vercel.
-
-To create another deployment:
-
-1. Import the GitHub repository into Vercel.
-2. Add `GOOGLE_GENERATIVE_AI_API_KEY` under Project Settings → Environment Variables.
-3. Enable it for Production and Preview as required.
-4. Deploy the selected branch.
-5. Test the complete qualification flow on the generated HTTPS URL.
-
-Commits pushed to the production branch trigger a new deployment.
-
-## Known limitations
-
-- The in-memory rate limiter is not shared between serverless instances.
-- The application does not persist conversations.
-- Qualification scores are guidance, not guaranteed project estimates.
-- The 3D readiness score is not yet connected directly to the live qualification result.
-- Cross-browser behavior must still be manually verified on real or hosted browsers.
+- AI-generated wording and qualification scores can vary between otherwise similar requests.
+- The score is project-planning guidance, not a guarantee that a project will succeed.
+- The assistant depends on the availability and response time of the Google Gemini API.
+- The in-memory rate limiter applies separately to each server instance and is not suitable for a high-traffic distributed production system.
+- Conversation history is not stored permanently, so refreshing the page can remove the current session.
+- The assistant cannot independently verify whether a user’s budget, timeline or technical claims are accurate.
+- The current end-to-end test uses a controlled response and does not continuously test the live Gemini service.
+- The 3D experience may use additional device resources, although reduced-motion and low-power fallbacks are provided.
 
 ## Future improvements
 
-- Replace the in-memory limiter with a distributed Redis-backed limiter
-- Persist optional conversation history with user consent
-- Connect the 3D orb directly to the qualification result
-- Add usage monitoring and budget alerts
-- Expand automated browser coverage
-- Improve the initial JavaScript cost of the 3D experience
+- Store conversations and evaluation history in a database
+- Replace the in-memory rate limiter with a shared service such as Upstash Redis
+- Add authentication and personal project dashboards
+- Add downloadable qualification reports
+- Expand evaluations with a larger, repeatable dataset
+- Add monitoring for model latency, errors and tool-call accuracy
+
+## Demo video
+
+An unlisted YouTube demonstration will be added here after recording.
+
+The demo covers:
+
+1. The purpose and intended users of the assistant
+2. A live end-to-end project qualification
+3. The structured qualification result
+4. The server-side tool design decision
+5. A live guardrail or recovery-state demonstration
+6. One current limitation
 
 ## Author
 
 **Sahil Biswas**
 
-Full-stack web developer focused on building practical web applications and AI-powered user experiences.
-
-## License
-
-This project is intended for educational and portfolio use.
+- Portfolio: https://my-portfolio-next-blue.vercel.app/
+- GitHub: https://github.com/sahilbiswas12-sky
+- LinkedIn: https://www.linkedin.com/in/sahil-biswas-827337287/
