@@ -285,6 +285,7 @@ After the tool returns its result, briefly explain the most important recommenda
 
       stopWhen: stepCountIs(5),
       abortSignal: request.signal,
+      maxRetries: 2,
 
       onError({ error }) {
         console.error("Gemini streaming error:", error);

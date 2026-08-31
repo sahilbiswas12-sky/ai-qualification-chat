@@ -318,9 +318,7 @@ export default function Chat() {
       return;
     }
 
-    const failedMessage = messages.at(-1);
-
-    if (!failedMessage) {
+    if (messages.length === 0) {
       showNotice("No failed message is available to retry.");
       return;
     }
@@ -329,9 +327,7 @@ export default function Chat() {
     setIsPinnedToBottom(true);
 
     try {
-      await regenerate({
-        messageId: failedMessage.id,
-      });
+      await regenerate();
     } catch {
       showNotice("Retry failed. Please check your connection.");
     } finally {

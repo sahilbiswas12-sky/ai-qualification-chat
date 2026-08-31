@@ -23,6 +23,7 @@ const mockedUseChat = vi.mocked(useChat);
 
 const setMessages = vi.fn();
 const sendMessage = vi.fn();
+const regenerate = vi.fn();
 const stop = vi.fn();
 
 function configureChat(
@@ -32,6 +33,7 @@ function configureChat(
     messages: [],
     setMessages,
     sendMessage,
+    regenerate,
     status: "ready",
     stop,
     error: undefined,
@@ -141,6 +143,38 @@ describe("Chat", () => {
         name: "Retry the failed AI response",
       }),
     ).toBeEnabled();
+  });
+
+
+  it("retries the latest failed response without a user message id", async () => {
+    const user = userEvent.setup();
+
+    configureChat({
+      status: "error",
+      error: new Error("The AI response was interrupted."),
+      messages: [
+        {
+          id: "user-1",
+          role: "user",
+          parts: [
+            {
+              type: "text",
+              text: "Evaluate my project idea.",
+            },
+          ],
+        },
+      ],
+    });
+
+    render(<Chat />);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Retry the failed AI response",
+      }),
+    );
+
+    expect(regenerate).toHaveBeenCalledWith();
   });
 
   it("validates the message form before sending", async () => {
