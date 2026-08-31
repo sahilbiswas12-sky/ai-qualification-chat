@@ -6,7 +6,10 @@ import { google } from "@ai-sdk/google";
  * The model and system prompt stay in this server-only module
  * so they can be changed without modifying the chat interface.
  */
-export const chatModel = google("gemini-3.6-flash");
+const modelName =
+  process.env.GOOGLE_GENERATIVE_AI_MODEL || "gemini-3.5-flash";
+
+export const chatModel = google(modelName);
 export const systemPrompt = `
 You are an AI Project Qualification Assistant.
 
