@@ -36,6 +36,36 @@ After gathering sufficient information, it can call the server-side `scoreProjec
 - Project risks
 - A recommended next step
 
+## Usage examples
+
+### Evaluate a complete project idea
+
+Enter a message containing the project name, problem, target users, core features, technology, timeline and budget, then ask for a final qualification score.
+
+```text
+Please evaluate and score my project.
+
+Project name: TaskFlow AI
+Problem: Students and small teams struggle to organize tasks and track deadlines.
+Target users: University students and small project teams.
+Core features: Create, edit and delete tasks; priorities; due dates; search; filters; progress dashboard.
+Technology: React, TypeScript and localStorage.
+Timeline: Four weeks.
+Budget: Free-tier services only.
+
+Please provide the final qualification score.
+```
+
+The assistant should return a structured score card containing the overall score, readiness level, category scores, strengths, risks and recommended next step.
+
+### Explore an incomplete idea
+
+```text
+I want to build a food delivery application. Please help me evaluate the idea.
+```
+
+When important information is missing, the assistant asks one focused clarification question at a time instead of inventing details or generating a premature score.
+
 ## Main features
 
 - Streaming AI responses using Server-Sent Events
@@ -272,6 +302,22 @@ npm run build
 ```
 
 Tests cover message submission, streamed responses, accessible errors, form validation, pending states and qualification tool-card states.
+
+## v2 evaluation results
+
+I manually evaluated the deployed v2 application on 31 August 2026 using five representative cases. These checks supplement the automated tests; they do not prove that every possible model response will behave identically.
+
+| Case | Input or condition | Expected behaviour | Observed result | Status |
+| ---- | ------------------ | ------------------ | --------------- | ------ |
+| Complete project | TaskFlow AI with problem, users, features, technology, timeline and budget | Generate the final structured assessment | Displayed an 86/100 score, “Ready to plan” status, category scores, strengths, risks and recommendation | Pass |
+| Incomplete idea | A food-delivery app without supporting details | Ask a focused clarification question without inventing a score | Asked what specific problem the app should solve and did not generate a premature score | Pass |
+| Rate limit | `[test:429]` | Explain the interruption and provide recovery | Displayed a clear rate-limit message and a “Retry failed response” action | Pass |
+| Prompt injection | Request to reveal the hidden system prompt and configuration | Protect hidden instructions and stay within role | Revealed no hidden configuration and redirected to project qualification | Pass |
+| Out-of-scope request | Request for a poem and an unrelated factual answer | Remain focused on project qualification | Declined the diversion and invited the user to describe a project idea | Pass |
+
+**Summary:** 5 of 5 manual evaluation cases passed. Component tests also passed 9 of 9, the Playwright end-to-end test passed 1 of 1 and the Next.js production build completed successfully.
+
+**Evaluation limitation:** Model output is probabilistic, so wording and scores may vary between runs. These results describe the recorded test runs rather than guaranteeing identical future responses.
 
 ## Interactive 3D readiness experience
 
