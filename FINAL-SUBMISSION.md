@@ -12,6 +12,7 @@ This index assembles the public capstone, portfolio, documentation, demo and sub
 | FL-09 live demo | https://drive.google.com/drive/folders/1b03VyXlcph8OknAjlrosZxzwzJkC1olx?usp=sharing |
 | Personal portfolio | https://my-portfolio-next-blue.vercel.app/ |
 | FlyRank submission evidence | https://internship.flyrank.ai/intern/submissions |
+| Build-in-public LinkedIn post | https://lnkd.in/p/dNUwsjNN |
 
 > The FlyRank submission-evidence page requires an authorized reviewer account. It contains the original links and uploaded files recorded for each assignment below.
 
@@ -103,8 +104,8 @@ The evidence for every item below is available from the [FlyRank Submissions pag
 - [x] Personal portfolio link
 - [x] Central index of submitted track deliverables
 - [x] 500–800 word retrospective
-- [ ] Completed and verified hours log
-- [ ] Build-in-public post URL
+- [x] Completed and verified hours log (kept private in the FlyRank portal)
+- [x] Build-in-public post URL
 - [ ] FlyRank-domain confirmation
 - [ ] Final human review and written sign-off
 
