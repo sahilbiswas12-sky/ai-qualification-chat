@@ -8,6 +8,7 @@ This index assembles the public capstone, portfolio, documentation, demo and sub
 | --- | --- |
 | AI Project Qualification Assistant — live application | https://ai-qualification-chat.vercel.app/ |
 | Capstone source code and README | https://github.com/sahilbiswas12-sky/ai-qualification-chat |
+| FL-10 retrospective | [RETROSPECTIVE.md](RETROSPECTIVE.md) |
 | FL-09 live demo | https://drive.google.com/drive/folders/1b03VyXlcph8OknAjlrosZxzwzJkC1olx?usp=sharing |
 | Personal portfolio | https://my-portfolio-next-blue.vercel.app/ |
 | FlyRank submission evidence | https://internship.flyrank.ai/intern/submissions |
@@ -101,7 +102,7 @@ The evidence for every item below is available from the [FlyRank Submissions pag
 - [x] FL-09 live demo link
 - [x] Personal portfolio link
 - [x] Central index of submitted track deliverables
-- [ ] 500–800 word retrospective
+- [x] 500–800 word retrospective
 - [ ] Completed and verified hours log
 - [ ] Build-in-public post URL
 - [ ] FlyRank-domain confirmation
