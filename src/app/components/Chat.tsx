@@ -984,6 +984,7 @@ export default function Chat() {
 
       <form onSubmit={handleSubmit}>
         <div className="input-wrapper">
+          <div className="composer-field">
           <textarea
             ref={textareaRef}
             id="chat-message"
@@ -1002,10 +1003,6 @@ export default function Chat() {
           />
 
           {interimTranscript && <span className="voice-preview">Listening: {interimTranscript}</span>}
-          <span className="composer-metrics" aria-live="polite" aria-label="Message length">
-            {wordCount} {wordCount === 1 ? "word" : "words"} · {input.length}/{MAX_CHARACTERS} characters
-          </span>
-          <span className="composer-tip">Ask about scope, stack, timeline or readiness</span>
           <button
             type="button"
             className={isListening ? "voice-button is-listening" : "voice-button"}
@@ -1020,6 +1017,14 @@ export default function Chat() {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0M12 17v4m-3 0h6" /></svg>
             )}
           </button>
+          </div>
+
+          <div className="composer-meta">
+            <span className="composer-metrics" aria-live="polite" aria-label="Message length">
+              {wordCount} {wordCount === 1 ? "word" : "words"} · {input.length}/{MAX_CHARACTERS} characters
+            </span>
+            <span className="composer-tip">Enter to send · Shift + Enter for a new line</span>
+          </div>
         </div>
 
         {isGenerating ? (
@@ -1042,9 +1047,6 @@ export default function Chat() {
           </button>
         )}
 
-        <small className="keyboard-hint">
-          Enter to send · Shift + Enter for a new line
-        </small>
       </form>
 
       {showClearConfirmation && (
