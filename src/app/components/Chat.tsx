@@ -66,7 +66,11 @@ interface StreamErrorPart {
 }
 
 interface SpeechRecognitionEventLike {
-  results: ArrayLike<{ 0: { transcript: string } }>;
+  resultIndex: number;
+  results: ArrayLike<{
+    0: { transcript: string };
+    isFinal: boolean;
+  }>;
 }
 
 interface SpeechRecognitionLike {
@@ -145,12 +149,16 @@ export default function Chat() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  const wordCount = input.trim() ? input.trim().split(/\s+/).length : 0;
 
   const {
     messages,
@@ -205,6 +213,16 @@ export default function Chat() {
     );
 
   const showThinking = isGenerating && !hasAssistantText;
+
+  useEffect(() => {
+    const initialClock = window.setTimeout(() => setCurrentDateTime(new Date()), 0);
+    const clock = window.setInterval(() => setCurrentDateTime(new Date()), 1000);
+
+    return () => {
+      window.clearTimeout(initialClock);
+      window.clearInterval(clock);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -405,6 +423,7 @@ export default function Chat() {
   }
 
   function confirmClearConversation() {
+    recognitionRef.current?.stop();
     setMessages([]);
     setInput("");
     setIsPinnedToBottom(true);
@@ -490,21 +509,94 @@ export default function Chat() {
     }
 
     const recognition = new Recognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.lang = "en-IN";
     recognition.onresult = (event) => {
-      const transcript = event.results[0]?.[0]?.transcript ?? "";
-      setInput((current) => `${current}${current ? " " : ""}${transcript}`.slice(0, MAX_CHARACTERS));
+      let finalText = "";
+      let interimText = "";
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript ?? "";
+        if (result?.isFinal) finalText += transcript;
+        else interimText += transcript;
+      }
+
+      setInterimTranscript(interimText);
+      if (finalText.trim()) {
+        setInput((current) => `${current}${current ? " " : ""}${finalText.trim()}`.slice(0, MAX_CHARACTERS));
+      }
     };
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {
+      setIsListening(false);
+      setInterimTranscript("");
+    };
     recognition.onerror = () => {
       setIsListening(false);
       showNotice("Voice input could not start");
     };
     recognitionRef.current = recognition;
     setIsListening(true);
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      setIsListening(false);
+      showNotice("Voice input is already active");
+    }
+  }
+
+  async function exportPdf() {
+    if (messages.length === 0) {
+      showNotice("Start a conversation before exporting a PDF");
+      return;
+    }
+
+    try {
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({ unit: "pt", format: "a4" });
+      const margin = 48;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const usableWidth = pageWidth - margin * 2;
+      let y = 58;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(18);
+      pdf.text("AI Project Qualification", margin, y);
+      y += 22;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      pdf.setTextColor(90);
+      pdf.text(`Generated ${new Date().toLocaleString()}`, margin, y);
+      y += 28;
+
+      for (const message of messages) {
+        const heading = message.role === "user" ? "YOU" : "PROJECT INTELLIGENCE";
+        const lines = pdf.splitTextToSize(getMessageText(message) || "[Structured result]", usableWidth);
+        const requiredHeight = 20 + lines.length * 14;
+        if (y + requiredHeight > pageHeight - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        pdf.setTextColor(message.role === "user" ? 20 : 10, message.role === "user" ? 100 : 120, message.role === "user" ? 210 : 150);
+        pdf.text(heading, margin, y);
+        y += 15;
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+        pdf.setTextColor(30);
+        pdf.text(lines, margin, y);
+        y += lines.length * 14 + 18;
+      }
+
+      pdf.save("ai-project-qualification.pdf");
+      showNotice("PDF exported successfully");
+    } catch (pdfError) {
+      console.error("Could not export PDF:", pdfError);
+      showNotice("PDF export failed");
+    }
   }
 
   function downloadConversation() {
@@ -576,6 +668,10 @@ export default function Chat() {
         </div>
 
         <div className="sidebar-footer">
+          <div className="live-clock" aria-label="Current date and time">
+            <strong>{currentDateTime ? currentDateTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}</strong>
+            <span>{currentDateTime ? currentDateTime.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "Loading date…"}</span>
+          </div>
           <div className="mini-progress"><span style={{ width: `${progressPercentage}%` }} /></div>
           <p><strong>{completedSteps}/{qualificationSteps.length}</strong> areas covered</p>
           <small>Your conversation is saved on this device.</small>
@@ -633,6 +729,10 @@ export default function Chat() {
               disabled={isGenerating}
             >
               Export
+            </button>
+
+            <button type="button" onClick={exportPdf} disabled={isGenerating}>
+              PDF
             </button>
 
             <button type="button" onClick={downloadJsonBackup} disabled={isGenerating}>
@@ -901,8 +1001,9 @@ export default function Chat() {
             aria-label="Your message"
           />
 
-          <span className="character-count">
-            {input.length}/{MAX_CHARACTERS}
+          {interimTranscript && <span className="voice-preview">Listening: {interimTranscript}</span>}
+          <span className="composer-metrics" aria-live="polite" aria-label="Message length">
+            {wordCount} {wordCount === 1 ? "word" : "words"} · {input.length}/{MAX_CHARACTERS} characters
           </span>
           <span className="composer-tip">Ask about scope, stack, timeline or readiness</span>
           <button
@@ -913,7 +1014,11 @@ export default function Chat() {
             aria-label={isListening ? "Stop voice input" : "Start voice input"}
             title="Voice input"
           >
-            {isListening ? "■" : "◉"}
+            {isListening ? (
+              <span className="voice-stop" aria-hidden="true" />
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0M12 17v4m-3 0h6" /></svg>
+            )}
           </button>
         </div>
 
