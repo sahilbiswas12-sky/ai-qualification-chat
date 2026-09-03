@@ -21,6 +21,7 @@ import QualificationToolCard, {
 } from "./QualificationToolCard";
 
 const STORAGE_KEY = "ai-qualification-chat-messages";
+const FEEDBACK_STORAGE_KEY = "ai-qualification-chat-feedback";
 const MAX_CHARACTERS = 1500;
 
 const qualificationSteps = [
@@ -44,6 +45,14 @@ const starterPrompts = [
   {
     title: "Qualify my business idea",
     text: "I have a business idea, but I need help defining its requirements.",
+  },
+  {
+    title: "Plan an e-commerce MVP",
+    text: "Help me plan an e-commerce MVP with users, features, technology and timeline.",
+  },
+  {
+    title: "Review my project scope",
+    text: "Review my project scope, identify risks and recommend what to keep in the first release.",
   },
 ];
 
@@ -151,6 +160,9 @@ export default function Chat() {
   const [isListening, setIsListening] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, "up" | "down">>({});
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -226,6 +238,17 @@ export default function Chat() {
 
   useEffect(() => {
     try {
+      const savedFeedback = localStorage.getItem(FEEDBACK_STORAGE_KEY);
+      if (savedFeedback) {
+        window.setTimeout(() => setMessageFeedback(JSON.parse(savedFeedback)), 0);
+      }
+    } catch {
+      localStorage.removeItem(FEEDBACK_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
       const savedMessages = localStorage.getItem(STORAGE_KEY);
 
       if (savedMessages) {
@@ -293,6 +316,7 @@ export default function Chat() {
       if (event.key === "Escape") {
         setIsSidebarOpen(false);
         setShowClearConfirmation(false);
+        setShowShortcuts(false);
       }
     }
 
@@ -304,6 +328,7 @@ export default function Chat() {
         window.clearTimeout(noticeTimerRef.current);
       }
       recognitionRef.current?.stop();
+      window.speechSynthesis?.cancel();
     };
   }, []);
 
@@ -429,6 +454,8 @@ export default function Chat() {
     setIsPinnedToBottom(true);
     setShowClearConfirmation(false);
     localStorage.removeItem(STORAGE_KEY);
+    window.speechSynthesis?.cancel();
+    setSpeakingMessageId(null);
     showNotice("Conversation cleared");
   }
 
@@ -457,6 +484,47 @@ export default function Chat() {
     } catch {
       showNotice("Unable to copy message");
     }
+  }
+
+  function reuseMessage(message: UIMessage) {
+    setInput(getMessageText(message).slice(0, MAX_CHARACTERS));
+    textareaRef.current?.focus();
+    showNotice("Message moved to the composer");
+  }
+
+  function rateMessage(messageId: string, rating: "up" | "down") {
+    const nextFeedback = {
+      ...messageFeedback,
+      [messageId]: messageFeedback[messageId] === rating ? undefined : rating,
+    };
+    const cleanedFeedback = Object.fromEntries(
+      Object.entries(nextFeedback).filter((entry) => entry[1]),
+    ) as Record<string, "up" | "down">;
+    setMessageFeedback(cleanedFeedback);
+    localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(cleanedFeedback));
+    showNotice(cleanedFeedback[messageId] ? "Feedback saved" : "Feedback removed");
+  }
+
+  function toggleReadAloud(message: UIMessage) {
+    if (!("speechSynthesis" in window)) {
+      showNotice("Read aloud is not supported in this browser");
+      return;
+    }
+
+    if (speakingMessageId === message.id) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(getMessageText(message));
+    utterance.lang = "en-IN";
+    utterance.rate = 1;
+    utterance.onend = () => setSpeakingMessageId(null);
+    utterance.onerror = () => setSpeakingMessageId(null);
+    setSpeakingMessageId(message.id);
+    window.speechSynthesis.speak(utterance);
   }
 
   async function shareConversation() {
@@ -743,6 +811,10 @@ export default function Chat() {
               Share
             </button>
 
+            <button type="button" onClick={() => setShowShortcuts(true)}>
+              Shortcuts
+            </button>
+
             <button
               type="button"
               className="danger-action"
@@ -852,7 +924,20 @@ export default function Chat() {
                   : "Project Intelligence"}
               </strong>
 
-              <button type="button" className="copy-message" onClick={() => copyMessage(message)} aria-label="Copy message">Copy</button>
+              <div className="message-actions" aria-label="Message actions">
+                <button type="button" onClick={() => copyMessage(message)} aria-label="Copy message">Copy</button>
+                {message.role === "user" ? (
+                  <button type="button" onClick={() => reuseMessage(message)} aria-label="Reuse message">Reuse</button>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => toggleReadAloud(message)} aria-label={speakingMessageId === message.id ? "Stop reading response" : "Read response aloud"}>
+                      {speakingMessageId === message.id ? "Stop" : "Listen"}
+                    </button>
+                    <button type="button" className={messageFeedback[message.id] === "up" ? "is-selected" : ""} onClick={() => rateMessage(message.id, "up")} aria-label="Helpful response" aria-pressed={messageFeedback[message.id] === "up"}>↑</button>
+                    <button type="button" className={messageFeedback[message.id] === "down" ? "is-selected is-negative" : ""} onClick={() => rateMessage(message.id, "down")} aria-label="Unhelpful response" aria-pressed={messageFeedback[message.id] === "down"}>↓</button>
+                  </>
+                )}
+              </div>
 
               {message.parts.map((part, index) => {
                 if (part.type === "text") {
@@ -933,6 +1018,9 @@ export default function Chat() {
             <div className="quick-replies">
               <button type="button" onClick={retryFailedMessage} disabled={isOnline === false}>
                 ↻ Regenerate response
+              </button>
+              <button type="button" onClick={() => submitMessage("Summarize our conversation so far and list the most important decisions and next actions.")} disabled={isOnline === false}>
+                Summarize conversation
               </button>
               {quickReplies.map((reply) => (
                 <button
@@ -1087,6 +1175,22 @@ export default function Chat() {
                 Clear conversation
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showShortcuts && (
+        <div className="confirmation-overlay" role="presentation" onMouseDown={() => setShowShortcuts(false)}>
+          <div className="confirmation-dialog shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" onMouseDown={(event) => event.stopPropagation()}>
+            <span className="dialog-icon" aria-hidden="true">⌨</span>
+            <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+            <dl>
+              <div><dt>Focus composer</dt><dd>Ctrl / ⌘ + K</dd></div>
+              <div><dt>Send message</dt><dd>Enter</dd></div>
+              <div><dt>New line</dt><dd>Shift + Enter</dd></div>
+              <div><dt>Close dialogs</dt><dd>Escape</dd></div>
+            </dl>
+            <button type="button" onClick={() => setShowShortcuts(false)}>Done</button>
           </div>
         </div>
       )}
