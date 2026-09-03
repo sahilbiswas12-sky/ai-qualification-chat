@@ -15,6 +15,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Project Intelligence | AI Qualification Assistant",
   description: "Turn a project idea into a clear, scored and development-ready brief.",
+  applicationName: "Project Intelligence",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Project Intelligence",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

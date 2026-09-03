@@ -1,0 +1,16 @@
+{
+  "name": "Project Intelligence — AI Qualification Assistant",
+  "short_name": "Project AI",
+  "description": "Turn project ideas into clear, development-ready briefs.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#02040a",
+  "theme_color": "#050914",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}
