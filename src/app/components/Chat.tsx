@@ -125,6 +125,8 @@ export default function Chat() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [showClearConfirmation, setShowClearConfirmation] =
     useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -245,7 +247,22 @@ export default function Chat() {
   }, [input]);
 
   useEffect(() => {
+    function handleGlobalKeyDown(event: globalThis.KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        textareaRef.current?.focus();
+      }
+
+      if (event.key === "Escape") {
+        setIsSidebarOpen(false);
+        setShowClearConfirmation(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+
     return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
       if (noticeTimerRef.current) {
         window.clearTimeout(noticeTimerRef.current);
       }
@@ -394,6 +411,15 @@ export default function Chat() {
     }
   }
 
+  async function copyMessage(message: UIMessage) {
+    try {
+      await navigator.clipboard.writeText(getMessageText(message));
+      showNotice("Message copied");
+    } catch {
+      showNotice("Unable to copy message");
+    }
+  }
+
   function downloadConversation() {
     const conversation = messages
       .map((message) => {
@@ -441,15 +467,45 @@ export default function Chat() {
       <div className="chat-glow chat-glow-one" />
       <div className="chat-glow chat-glow-two" />
 
+      <aside className={isSidebarOpen ? "chat-sidebar is-open" : "chat-sidebar"}>
+        <div className="sidebar-brand">
+          <span className="assistant-logo" aria-hidden="true">PI</span>
+          <div><strong>Project Intelligence</strong><small>AI workspace</small></div>
+        </div>
+
+        <button type="button" className="new-chat-button" onClick={requestClearConversation}>
+          <span aria-hidden="true">＋</span> New analysis
+        </button>
+
+        <div className="sidebar-section">
+          <span className="sidebar-label">Qualification checklist</span>
+          <ol className="step-list">
+            {qualificationSteps.map((step, index) => (
+              <li key={step} className={index < completedSteps ? "complete" : index === completedSteps ? "active" : ""}>
+                <span>{index < completedSteps ? "✓" : index + 1}</span>{step}
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="mini-progress"><span style={{ width: `${progressPercentage}%` }} /></div>
+          <p><strong>{completedSteps}/{qualificationSteps.length}</strong> areas covered</p>
+          <small>Your conversation is saved on this device.</small>
+        </div>
+      </aside>
+
+      {isSidebarOpen && <button type="button" className="sidebar-backdrop" aria-label="Close menu" onClick={() => setIsSidebarOpen(false)} />}
+
+      <div className="chat-workspace">
+
       <div className="chat-topbar">
         <div className="assistant-identity">
-          <div className="assistant-logo" aria-hidden="true">
-            AI
-          </div>
+          <button type="button" className="menu-button" aria-label="Open menu" onClick={() => setIsSidebarOpen(true)}>☰</button>
 
           <div>
             <div className="assistant-name-row">
-              <h2>Project Intelligence</h2>
+              <h1>Project Qualification</h1>
 
               <span
                 className={
@@ -465,13 +521,17 @@ export default function Chat() {
             </div>
 
             <p>
-              Streaming project qualification assistant
+              Turn your idea into a development-ready plan
             </p>
           </div>
         </div>
 
         {messages.length > 0 && (
           <div className="chat-actions">
+            <label className="message-search">
+              <span aria-hidden="true">⌕</span>
+              <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search" aria-label="Search conversation" />
+            </label>
             <button
               type="button"
               onClick={copyConversation}
@@ -581,7 +641,7 @@ export default function Chat() {
           </div>
         )}
 
-        {messages.map((message) => (
+        {messages.filter((message) => !searchQuery.trim() || getMessageText(message).toLowerCase().includes(searchQuery.trim().toLowerCase())).map((message) => (
           <article
             key={message.id}
             data-role={message.role}
@@ -596,6 +656,8 @@ export default function Chat() {
                   ? "You"
                   : "Project Intelligence"}
               </strong>
+
+              <button type="button" className="copy-message" onClick={() => copyMessage(message)} aria-label="Copy message">Copy</button>
 
               {message.parts.map((part, index) => {
                 if (part.type === "text") {
@@ -744,6 +806,7 @@ export default function Chat() {
           <span className="character-count">
             {input.length}/{MAX_CHARACTERS}
           </span>
+          <span className="composer-tip">Ask about scope, stack, timeline or readiness</span>
         </div>
 
         {isGenerating ? (
@@ -812,6 +875,7 @@ export default function Chat() {
           </div>
         </div>
       )}
+      </div>
     </section>
   );
 }
