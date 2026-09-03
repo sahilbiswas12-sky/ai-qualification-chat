@@ -280,4 +280,36 @@ describe("Chat", () => {
       }),
     ).toBeInTheDocument();
   });
+
+  it("restores a dated conversation from history", async () => {
+    const savedMessages = [
+      {
+        id: "saved-user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Plan my expense tracker" }],
+      },
+    ];
+
+    localStorage.setItem("ai-qualification-chat-active-id", "saved-chat");
+    localStorage.setItem(
+      "ai-qualification-chat-history",
+      JSON.stringify([
+        {
+          id: "saved-chat",
+          title: "Plan my expense tracker",
+          createdAt: "2026-09-03T08:00:00.000Z",
+          updatedAt: "2026-09-03T08:15:00.000Z",
+          messages: savedMessages,
+        },
+      ]),
+    );
+
+    render(<Chat />);
+
+    expect(
+      await screen.findByRole("button", { name: /^plan my expense tracker/i }),
+    ).toBeInTheDocument();
+
+    expect(setMessages).toHaveBeenCalledWith(savedMessages);
+  });
 });
