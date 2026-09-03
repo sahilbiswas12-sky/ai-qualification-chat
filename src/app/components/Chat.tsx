@@ -65,6 +65,23 @@ interface StreamErrorPart {
   errorText?: string;
 }
 
+interface SpeechRecognitionEventLike {
+  results: ArrayLike<{ 0: { transcript: string } }>;
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
 function getStreamErrorText(messages: UIMessage[]) {
   for (
     let messageIndex = messages.length - 1;
@@ -127,11 +144,13 @@ export default function Chat() {
     useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isListening, setIsListening] = useState(false);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   const {
     messages,
@@ -266,6 +285,7 @@ export default function Chat() {
       if (noticeTimerRef.current) {
         window.clearTimeout(noticeTimerRef.current);
       }
+      recognitionRef.current?.stop();
     };
   }, []);
 
@@ -420,6 +440,73 @@ export default function Chat() {
     }
   }
 
+  async function shareConversation() {
+    const text = messages
+      .map((message) => `${message.role === "user" ? "You" : "Project Intelligence"}: ${getMessageText(message)}`)
+      .join("\n\n");
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "AI Project Qualification", text });
+        showNotice("Conversation shared");
+      } else {
+        await navigator.clipboard.writeText(text);
+        showNotice("Share text copied");
+      }
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === "AbortError") return;
+      showNotice("Unable to share conversation");
+    }
+  }
+
+  function downloadJsonBackup() {
+    const file = new Blob([
+      JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), messages }, null, 2),
+    ], { type: "application/json" });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "project-intelligence-backup.json";
+    link.click();
+    URL.revokeObjectURL(url);
+    showNotice("JSON backup downloaded");
+  }
+
+  function toggleVoiceInput() {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const speechWindow = window as typeof window & {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+
+    if (!Recognition) {
+      showNotice("Voice input is not supported in this browser");
+      return;
+    }
+
+    const recognition = new Recognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-IN";
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? "";
+      setInput((current) => `${current}${current ? " " : ""}${transcript}`.slice(0, MAX_CHARACTERS));
+    };
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => {
+      setIsListening(false);
+      showNotice("Voice input could not start");
+    };
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    recognition.start();
+  }
+
   function downloadConversation() {
     const conversation = messages
       .map((message) => {
@@ -546,6 +633,14 @@ export default function Chat() {
               disabled={isGenerating}
             >
               Export
+            </button>
+
+            <button type="button" onClick={downloadJsonBackup} disabled={isGenerating}>
+              Backup
+            </button>
+
+            <button type="button" onClick={shareConversation} disabled={isGenerating}>
+              Share
             </button>
 
             <button
@@ -736,6 +831,9 @@ export default function Chat() {
           messages.length > 0 &&
           lastMessage?.role === "assistant" && (
             <div className="quick-replies">
+              <button type="button" onClick={retryFailedMessage} disabled={isOnline === false}>
+                ↻ Regenerate response
+              </button>
               {quickReplies.map((reply) => (
                 <button
                   key={reply}
@@ -807,6 +905,16 @@ export default function Chat() {
             {input.length}/{MAX_CHARACTERS}
           </span>
           <span className="composer-tip">Ask about scope, stack, timeline or readiness</span>
+          <button
+            type="button"
+            className={isListening ? "voice-button is-listening" : "voice-button"}
+            onClick={toggleVoiceInput}
+            disabled={isGenerating || isOnline === false}
+            aria-label={isListening ? "Stop voice input" : "Start voice input"}
+            title="Voice input"
+          >
+            {isListening ? "■" : "◉"}
+          </button>
         </div>
 
         {isGenerating ? (

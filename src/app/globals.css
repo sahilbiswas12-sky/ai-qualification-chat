@@ -1729,7 +1729,11 @@ body {
 .chat-empty-state h2 { background: linear-gradient(120deg,#fff,#8bcaff 65%,#22dfff); background-clip: text; color: transparent; }
 .chat-workspace > form { position: relative; margin: 0; padding: 14px max(24px, calc((100% - 900px) / 2)) 18px; border-top: 1px solid var(--border); background: rgba(4,10,23,.96); }
 .input-wrapper { position: relative; }
+.input-wrapper textarea { padding-right: 52px; }
 .composer-tip { position: absolute; left: 16px; bottom: -28px; color: #5f7596; font-size: .66rem; }
+.voice-button { position: absolute; right: 12px; bottom: 12px; display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: rgba(12,24,48,.92); color: var(--blue-bright); }
+.voice-button:hover:not(:disabled) { border-color: var(--blue-bright); }
+.voice-button.is-listening { border-color: var(--danger); color: #ff8aa3; animation: connection-pulse 1s ease-in-out infinite; }
 .copy-message { float: right; margin: -24px -7px 5px 12px; border: 0; background: transparent; color: transparent; font-size: .66rem; }
 .message-content:hover .copy-message,
 .copy-message:focus-visible { color: var(--muted); }
@@ -1754,6 +1758,8 @@ body {
   .assistant-identity p { display: none; }
   .message-search { display: none; }
   .chat-actions button { padding: 7px 8px; }
+  .chat-actions button:nth-of-type(2),
+  .chat-actions button:nth-of-type(3) { display: none; }
   .qualification-dashboard { display: block; }
   .conversation-stats { display: none; }
   .messages-panel { padding-top: 18px; }
