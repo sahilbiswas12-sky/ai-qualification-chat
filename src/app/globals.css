@@ -1746,9 +1746,19 @@ body {
 .voice-stop { width: 10px; height: 10px; border-radius: 2px; background: currentColor; }
 .voice-button:hover:not(:disabled) { border-color: var(--blue-bright); transform: translateY(-50%); }
 .voice-button.is-listening { border-color: var(--danger); color: #ff8aa3; animation: connection-pulse 1s ease-in-out infinite; }
-.copy-message { float: right; margin: -24px -7px 5px 12px; border: 0; background: transparent; color: transparent; font-size: .66rem; }
-.message-content:hover .copy-message,
-.copy-message:focus-visible { color: var(--muted); }
+.message-actions { display: flex; float: right; align-items: center; gap: 3px; margin: -27px -9px 5px 12px; }
+.message-actions button { min-width: 30px; min-height: 26px; padding: 3px 7px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: transparent; font-size: .65rem; }
+.message-content:hover .message-actions button,
+.message-actions button:focus-visible,
+.message-actions button.is-selected { color: var(--muted); }
+.message-actions button:hover { border-color: var(--border); background: rgba(22,140,255,.08); color: var(--text); }
+.message-actions button.is-selected { border-color: rgba(46,242,160,.35); color: var(--success); }
+.message-actions button.is-negative { border-color: rgba(255,66,104,.35); color: #ff8aa3; }
+.shortcuts-dialog dl { display: grid; gap: 8px; margin: 20px 0; text-align: left; }
+.shortcuts-dialog dl > div { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px; }
+.shortcuts-dialog dt { color: var(--muted); font-size: .78rem; }
+.shortcuts-dialog dd { margin: 0; color: var(--text); font-family: var(--font-geist-mono); font-size: .72rem; font-weight: 800; }
+.shortcuts-dialog > button { width: 100%; min-height: 42px; border: 1px solid var(--border-bright); border-radius: 10px; background: var(--blue); color: white; font-weight: 800; }
 .message-search { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 9px; border: 1px solid var(--border); border-radius: 9px; background: rgba(12,24,48,.8); color: var(--muted); }
 .message-search input { width: 95px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: .72rem; }
 .sidebar-backdrop { display: none; }
