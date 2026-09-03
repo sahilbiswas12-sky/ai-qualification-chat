@@ -22,6 +22,8 @@ import QualificationToolCard, {
 
 const STORAGE_KEY = "ai-qualification-chat-messages";
 const FEEDBACK_STORAGE_KEY = "ai-qualification-chat-feedback";
+const HISTORY_STORAGE_KEY = "ai-qualification-chat-history";
+const ACTIVE_CONVERSATION_KEY = "ai-qualification-chat-active-id";
 const MAX_CHARACTERS = 1500;
 
 const qualificationSteps = [
@@ -95,6 +97,24 @@ interface SpeechRecognitionLike {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
+interface ConversationRecord {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: UIMessage[];
+}
+
+function createConversationId() {
+  return `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getConversationTitle(messages: UIMessage[]) {
+  const firstUserMessage = messages.find((message) => message.role === "user");
+  const text = firstUserMessage ? getMessageText(firstUserMessage).trim() : "";
+  return text ? `${text.slice(0, 42)}${text.length > 42 ? "…" : ""}` : "New project analysis";
+}
+
 function getStreamErrorText(messages: UIMessage[]) {
   for (
     let messageIndex = messages.length - 1;
@@ -163,6 +183,9 @@ export default function Chat() {
   const [messageFeedback, setMessageFeedback] = useState<Record<string, "up" | "down">>({});
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState<ConversationRecord[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -248,24 +271,56 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
+    let restoreTimer: number | undefined;
+
     try {
+      const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
+      const storedActiveId = localStorage.getItem(ACTIVE_CONVERSATION_KEY);
       const savedMessages = localStorage.getItem(STORAGE_KEY);
+      const parsedHistory = savedHistory ? JSON.parse(savedHistory) as ConversationRecord[] : [];
+      const selectedConversation = parsedHistory.find((conversation) => conversation.id === storedActiveId);
 
-      if (savedMessages) {
-        const parsedMessages = JSON.parse(
-          savedMessages,
-        ) as UIMessage[];
-
-        setMessages(parsedMessages);
+      if (selectedConversation) {
+        restoreTimer = window.setTimeout(() => {
+          setConversationHistory(parsedHistory);
+          setActiveConversationId(selectedConversation.id);
+          setMessages(selectedConversation.messages);
+          setIsStorageLoaded(true);
+        }, 0);
+      } else if (savedMessages) {
+        const parsedMessages = JSON.parse(savedMessages) as UIMessage[];
+        const now = new Date().toISOString();
+        const migratedConversation: ConversationRecord = {
+          id: createConversationId(),
+          title: getConversationTitle(parsedMessages),
+          createdAt: now,
+          updatedAt: now,
+          messages: parsedMessages,
+        };
+        restoreTimer = window.setTimeout(() => {
+          setConversationHistory(parsedMessages.length ? [migratedConversation] : []);
+          setActiveConversationId(migratedConversation.id);
+          setMessages(parsedMessages);
+          setIsStorageLoaded(true);
+        }, 0);
+      } else {
+        restoreTimer = window.setTimeout(() => {
+          setConversationHistory(parsedHistory);
+          setActiveConversationId(createConversationId());
+          setIsStorageLoaded(true);
+        }, 0);
       }
     } catch (storageError) {
       console.error(
         "Could not restore conversation:",
         storageError,
       );
-    } finally {
-      setIsStorageLoaded(true);
+      restoreTimer = window.setTimeout(() => setIsStorageLoaded(true), 0);
     }
+
+    return () => {
+      if (restoreTimer) window.clearTimeout(restoreTimer);
+    };
   }, [setMessages]);
 
   useEffect(() => {
@@ -278,13 +333,36 @@ export default function Chat() {
         STORAGE_KEY,
         JSON.stringify(messages),
       );
+      if (messages.length > 0 && activeConversationId) {
+        const saveTimer = window.setTimeout(() => {
+          setConversationHistory((currentHistory) => {
+            const now = new Date().toISOString();
+            const existing = currentHistory.find((conversation) => conversation.id === activeConversationId);
+            const updatedConversation: ConversationRecord = {
+              id: activeConversationId,
+              title: getConversationTitle(messages),
+              createdAt: existing?.createdAt ?? now,
+              updatedAt: now,
+              messages,
+            };
+            const nextHistory = [
+              updatedConversation,
+              ...currentHistory.filter((conversation) => conversation.id !== activeConversationId),
+            ].slice(0, 50);
+            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+            localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
+            return nextHistory;
+          });
+        }, 0);
+        return () => window.clearTimeout(saveTimer);
+      }
     } catch (storageError) {
       console.error(
         "Could not save conversation:",
         storageError,
       );
     }
-  }, [messages, isStorageLoaded]);
+  }, [messages, isStorageLoaded, activeConversationId]);
 
   useEffect(() => {
     if (isPinnedToBottom) {
@@ -443,6 +521,42 @@ export default function Chat() {
     setShowClearConfirmation(true);
   }
 
+  function startNewConversation() {
+    if (isGenerating) stop();
+    recognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
+    const nextId = createConversationId();
+    setActiveConversationId(nextId);
+    localStorage.setItem(ACTIVE_CONVERSATION_KEY, nextId);
+    setMessages([]);
+    setInput("");
+    setSpeakingMessageId(null);
+    setIsSidebarOpen(false);
+    setIsPinnedToBottom(true);
+    showNotice("New analysis started");
+  }
+
+  function openConversation(conversation: ConversationRecord) {
+    if (isGenerating) stop();
+    recognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
+    setActiveConversationId(conversation.id);
+    localStorage.setItem(ACTIVE_CONVERSATION_KEY, conversation.id);
+    setMessages(conversation.messages);
+    setInput("");
+    setSpeakingMessageId(null);
+    setIsSidebarOpen(false);
+    setIsPinnedToBottom(true);
+  }
+
+  function deleteConversation(conversationId: string) {
+    const nextHistory = conversationHistory.filter((conversation) => conversation.id !== conversationId);
+    setConversationHistory(nextHistory);
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+    if (conversationId === activeConversationId) startNewConversation();
+    else showNotice("Conversation deleted");
+  }
+
   function cancelClearConversation() {
     setShowClearConfirmation(false);
   }
@@ -454,6 +568,12 @@ export default function Chat() {
     setIsPinnedToBottom(true);
     setShowClearConfirmation(false);
     localStorage.removeItem(STORAGE_KEY);
+    const nextHistory = conversationHistory.filter((conversation) => conversation.id !== activeConversationId);
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+    setConversationHistory(nextHistory);
+    const nextId = createConversationId();
+    setActiveConversationId(nextId);
+    localStorage.setItem(ACTIVE_CONVERSATION_KEY, nextId);
     window.speechSynthesis?.cancel();
     setSpeakingMessageId(null);
     showNotice("Conversation cleared");
@@ -720,9 +840,36 @@ export default function Chat() {
           <div><strong>Project Intelligence</strong><small>AI workspace</small></div>
         </div>
 
-        <button type="button" className="new-chat-button" onClick={requestClearConversation}>
+        <button type="button" className="new-chat-button" onClick={startNewConversation}>
           <span aria-hidden="true">＋</span> New analysis
         </button>
+
+        <div className="history-section">
+          <div className="history-heading">
+            <span className="sidebar-label">History</span>
+            <small>{conversationHistory.length}/50</small>
+          </div>
+          <label className="history-search">
+            <span aria-hidden="true">⌕</span>
+            <input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Search history" aria-label="Search conversation history" />
+          </label>
+          <div className="history-list">
+            {conversationHistory
+              .filter((conversation) => conversation.title.toLowerCase().includes(historySearch.trim().toLowerCase()))
+              .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+              .map((conversation) => (
+                <div key={conversation.id} className={conversation.id === activeConversationId ? "history-item is-active" : "history-item"}>
+                  <button type="button" className="history-open" onClick={() => openConversation(conversation)}>
+                    <strong>{conversation.title}</strong>
+                    <span>{new Date(conversation.updatedAt).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span>
+                    <small>{new Date(conversation.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {conversation.messages.length} messages</small>
+                  </button>
+                  <button type="button" className="history-delete" onClick={() => deleteConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}>×</button>
+                </div>
+              ))}
+            {conversationHistory.length === 0 && <p className="history-empty">Your saved conversations will appear here.</p>}
+          </div>
+        </div>
 
         <div className="sidebar-section">
           <span className="sidebar-label">Qualification checklist</span>
